@@ -13,11 +13,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,600;1,300&family=DM+Mono:wght@300;400;500&family=Outfit:wght@300;400;500;600;700;800&family=Pacifico&family=Poppins:wght@300;400;600;700&family=Playfair+Display:ital,wght@0,400;0,700;1,400&family=Cinzel:wght@400;700&family=Montserrat:wght@300;400;600;700&family=Raleway:wght@300;400;600;700&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet" />
   <link rel="icon" href="Logo_0.png" />
-  <!-- qrcode.js — pure JS QR matrix generator, no canvas dependency on external -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
   <style>
 /* ============================================================
-   WishCraft — Full Upgrade: Compressed URLs · Canvas QR · Link Preview
+   WishCraft — Full Upgrade (Bug-fixed)
    ============================================================ */
 :root {
   --a:#b38f6f; --b:#161616;
@@ -121,7 +120,7 @@ select.inp option{color:#111;background:#fff}
 .progress-wrap.show{display:block}
 .progress-bar{height:100%;background:linear-gradient(90deg,var(--a),#fff);width:0%;transition:width .4s var(--ease);border-radius:2px}
 /* ── Buttons */
-.btn{display:inline-flex;align-items:center;gap:7px;padding:10px 18px;border-radius:var(--radius-sm);border:1px solid var(--stroke2);background:var(--surface2);color:#fff;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;transition:all var(--t) var(--ease);white-space:nowrap;text-decoration:none;letter-spacing:.01em}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:10px 18px;border-radius:var(--radius-sm);border:1px solid var(--stroke2);background:var(--surface2);color:#fff;font-family:inherit;font-size:13px;font-weight:500;cursor:pointer;transition:all var(--t) var(--ease);white-space:nowrap;text-decoration:none;letter-spacing:.01em}
 .btn:hover{background:rgba(255,255,255,.09);border-color:rgba(255,255,255,.18);transform:translateY(-1px)}
 .btn:active{transform:translateY(0)}
 .btn:disabled{opacity:.35;cursor:not-allowed;pointer-events:none;transform:none!important}
@@ -129,10 +128,21 @@ select.inp option{color:#111;background:#fff}
 .btn-primary:hover{filter:brightness(1.12);box-shadow:0 12px 36px rgba(0,0,0,.5)}
 .btn-ghost{background:transparent;border-color:var(--stroke)}
 .btn-ghost:hover{background:var(--surface2)}
-.btn-icon{padding:10px;border-radius:var(--radius-sm);border:1px solid var(--stroke);background:var(--surface)}
+/* FIX: Copy button — explicit sizing, no absolute child positioning needed */
+.btn-icon{padding:0;width:40px;height:40px;border-radius:var(--radius-sm);border:1px solid var(--stroke);background:var(--surface);position:relative;overflow:hidden;flex-shrink:0}
 .btn-icon:hover{background:var(--surface2);border-color:var(--stroke2)}
 .btn-sm{font-size:11px;padding:7px 12px}
 .actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+/* ── Copy button morph — FIX: use flex centering instead of absolute */
+#copyBtn{display:inline-flex;align-items:center;justify-content:center}
+.copy-icon,.copy-check{
+  display:flex;align-items:center;justify-content:center;
+  transition:opacity .2s var(--ease),transform .2s var(--ease);
+  position:absolute;inset:0;
+}
+.copy-check{opacity:0;transform:scale(.6);color:#3ecf8e}
+#copyBtn.copied .copy-icon{opacity:0;transform:scale(.6)}
+#copyBtn.copied .copy-check{opacity:1;transform:scale(1)}
 
 /* ── URL Length Indicator */
 .url-meta{display:flex;align-items:center;gap:8px;margin-top:6px;font-family:'DM Mono',monospace;font-size:10px;color:var(--muted2)}
@@ -147,7 +157,7 @@ select.inp option{color:#111;background:#fff}
 .share-title{font-weight:700;font-size:14px}
 .share-sub{font-size:11px;color:var(--muted2);margin-top:3px;font-family:'DM Mono',monospace}
 .share-link-row{display:flex;gap:8px;align-items:center}
-.share-inp{flex:1;font-size:11px}
+.share-inp{flex:1;font-size:11px;min-width:0}
 
 /* ── LINK PREVIEW CARD */
 .link-preview{
@@ -180,7 +190,6 @@ select.inp option{color:#111;background:#fff}
 .qr-label{font-weight:600;font-size:13px}
 .qr-hint{font-size:10px;color:var(--muted2);font-family:'DM Mono',monospace}
 .qr-wrap{display:flex;justify-content:center;align-items:center;padding:20px;min-height:90px;background:rgba(0,0,0,.2);border-radius:var(--radius-sm);border:1px solid var(--stroke);position:relative}
-/* canvas QR container */
 #qrCanvas-wrap{display:flex;justify-content:center;align-items:center;padding:16px;border-radius:12px;overflow:hidden;position:relative}
 #qrCanvas-wrap canvas{border-radius:4px;display:block}
 .qr-ph{text-align:center;color:var(--muted2);font-size:11px}
@@ -222,30 +231,39 @@ select.inp option{color:#111;background:#fff}
 .theme-strip{display:flex;gap:5px;margin-top:14px;flex-wrap:wrap}
 .theme-mini{height:4px;flex:1;min-width:14px;border-radius:2px;opacity:.6;transition:opacity .2s,transform .2s;cursor:pointer}
 .theme-mini:hover{opacity:1;transform:scaleY(2)}
-/* ── IMPROVEMENT 1: prefers-reduced-motion ── */
+/* ── prefers-reduced-motion */
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
   .bgfx-orb,.logo-ring,#bgStars,.stage-particles{display:none!important}
 }
-
-/* ── IMPROVEMENT 2: Toast system — queued, typed, stacked ── */
+/* ── Toast system */
 .toast-container{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);display:flex;flex-direction:column-reverse;gap:8px;z-index:9999;pointer-events:none;align-items:center}
-.toast{display:inline-flex;align-items:center;gap:8px;padding:10px 18px;border-radius:999px;background:rgba(10,10,20,.92);border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(16px);color:#fff;font-size:13px;font-weight:500;pointer-events:none;white-space:nowrap;opacity:0;transform:translateY(12px);transition:opacity .22s var(--ease),transform .22s var(--ease)}
+.toast{display:inline-flex;align-items:center;gap:8px;padding:10px 18px;border-radius:999px;background:rgba(10,10,20,.92);border:1px solid rgba(255,255,255,.12);backdrop-filter:blur(16px);color:#fff;font-size:13px;font-weight:500;pointer-events:auto;white-space:nowrap;opacity:0;transform:translateY(12px);transition:opacity .22s var(--ease),transform .22s var(--ease)}
 .toast.show{opacity:1;transform:translateY(0)}
 .toast.hide{opacity:0;transform:translateY(-8px)}
 .toast-icon{flex-shrink:0}
 .toast.success{border-color:rgba(62,207,142,.35)}
 .toast.error{border-color:rgba(239,68,68,.35)}
 .toast.info{border-color:rgba(96,165,250,.25)}
-
-/* ── IMPROVEMENT 3: Copy button checkmark morph ── */
-.copy-icon,.copy-check{transition:opacity .2s var(--ease),transform .2s var(--ease);position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}
-.copy-check{opacity:0;transform:translate(-50%,-50%) scale(.6);color:#3ecf8e}
-#copyBtn{position:relative;width:40px;height:40px;overflow:hidden}
-#copyBtn.copied .copy-icon{opacity:0;transform:translate(-50%,-50%) scale(.6)}
-#copyBtn.copied .copy-check{opacity:1;transform:translate(-50%,-50%) scale(1)}
-
-/* ── IMPROVEMENT 4: Mobile bottom-sheet live preview ── */
+/* ── Accessible swatches */
+.swatch:focus-visible{outline:2px solid var(--a);outline-offset:3px;border-radius:9px}
+.swatch-bar:focus{outline:none}
+/* ── Message template pills */
+.template-pills{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
+.tmpl-pill{padding:4px 13px;border-radius:999px;font-size:11px;border:1px solid var(--stroke2);background:transparent;color:var(--muted2);cursor:pointer;font-family:'DM Mono',monospace;letter-spacing:.03em;transition:all .15s var(--ease);white-space:nowrap}
+.tmpl-pill:hover{background:var(--surface2);color:#fff;border-color:var(--a)}
+.tmpl-pill:focus-visible{outline:2px solid var(--a);outline-offset:2px}
+/* ── Expiry notice */
+.expiry-notice{display:none;align-items:center;gap:7px;padding:7px 14px;border-radius:999px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.28);color:#f59e0b;font-size:11px;font-family:'DM Mono',monospace;z-index:1}
+.expiry-notice.visible{display:flex}
+.expiry-notice.critical{background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.28);color:#ef4444}
+/* Expired overlay */
+.expired-screen{display:none;position:absolute;inset:0;flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center;padding:40px;background:rgba(6,6,12,.92);backdrop-filter:blur(8px);border-radius:inherit;z-index:10}
+.expired-screen.visible{display:flex}
+.expired-icon{font-size:60px;opacity:.5}
+.expired-title{font-size:28px;font-weight:800;letter-spacing:-.02em}
+.expired-sub{color:var(--muted);font-size:14px;max-width:300px;line-height:1.65}
+/* ── Mobile FAB */
 .preview-fab{display:none;position:fixed;bottom:24px;right:20px;z-index:200;align-items:center;gap:8px;padding:12px 20px;border-radius:999px;background:linear-gradient(135deg,var(--a),color-mix(in srgb,var(--a) 50%,#000));border:none;color:#fff;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 8px 32px rgba(0,0,0,.55),0 2px 8px rgba(0,0,0,.3);transition:transform .2s var(--spring),box-shadow .2s}
 .preview-fab:hover{transform:scale(1.05)}
 .preview-fab svg{width:16px;height:16px}
@@ -259,27 +277,6 @@ select.inp option{color:#111;background:#fff}
 .sheet-title{font-size:13px;font-weight:600;color:var(--muted)}
 .sheet-close{background:none;border:none;color:var(--muted2);cursor:pointer;font-size:20px;padding:4px 6px;line-height:1;border-radius:6px}
 .sheet-close:hover{background:var(--surface2);color:#fff}
-
-/* ── IMPROVEMENT 5: Accessible swatches ── */
-.swatch:focus-visible{outline:2px solid var(--a);outline-offset:3px;border-radius:9px}
-.swatch-bar:focus{outline:none}
-
-/* ── IMPROVEMENT 6: Message template pills ── */
-.template-pills{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px}
-.tmpl-pill{padding:4px 13px;border-radius:999px;font-size:11px;border:1px solid var(--stroke2);background:transparent;color:var(--muted2);cursor:pointer;font-family:'DM Mono',monospace;letter-spacing:.03em;transition:all .15s var(--ease);white-space:nowrap}
-.tmpl-pill:hover{background:var(--surface2);color:#fff;border-color:var(--a)}
-.tmpl-pill:focus-visible{outline:2px solid var(--a);outline-offset:2px}
-
-/* ── IMPROVEMENT 7: Expiry notice on player ── */
-.expiry-notice{display:none;align-items:center;gap:7px;padding:7px 14px;border-radius:999px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.28);color:#f59e0b;font-size:11px;font-family:'DM Mono',monospace;z-index:1}
-.expiry-notice.visible{display:flex}
-.expiry-notice.critical{background:rgba(239,68,68,.08);border-color:rgba(239,68,68,.28);color:#ef4444}
-/* Expired full-screen overlay */
-.expired-screen{display:none;position:absolute;inset:0;flex-direction:column;align-items:center;justify-content:center;gap:16px;text-align:center;padding:40px;background:rgba(6,6,12,.92);backdrop-filter:blur(8px);border-radius:inherit;z-index:10}
-.expired-screen.visible{display:flex}
-.expired-icon{font-size:60px;opacity:.5}
-.expired-title{font-size:28px;font-weight:800;letter-spacing:-.02em}
-.expired-sub{color:var(--muted);font-size:14px;max-width:300px;line-height:1.65}
 /* ── Player */
 .player-wrap{max-width:740px;margin:0 auto}
 .player-stage{position:relative;border-radius:22px;padding:36px 32px 28px;min-height:620px;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:20px;overflow:hidden;border:1px solid rgba(255,255,255,.08);background:linear-gradient(160deg,rgba(255,255,255,.025),rgba(0,0,0,.25));transition:background .5s}
@@ -288,7 +285,7 @@ select.inp option{color:#111;background:#fff}
 .p-name{font-size:clamp(38px,8vw,60px);font-weight:800;margin-top:8px;line-height:1;letter-spacing:-.03em}
 .p-age{font-size:14px;color:var(--a);margin-top:6px;font-family:'DM Mono',monospace}
 .p-msg{font-size:clamp(13px,2vw,16px);color:var(--muted);margin-top:14px;max-width:540px;line-height:1.65}
-.player-photo{width:min(300px,80vw);aspect-ratio:1;border-radius:24px;overflow:hidden;background:rgba(255,255,255,.03);display:flex;align-items:center;justify-content:center;border:1px solid rgba(255,255,255,.1);z-index:1;box-shadow:0 24px 80px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.06),0 0 40px rgba(var(--photo-glow,179,143,111),.12)}
+.player-photo{width:min(300px,80vw);aspect-ratio:1;border-radius:24px;overflow:hidden;background:rgba(255,255,255,.03);display:flex;align-items:center;justify-content:center;border:1px solid rgba(255,255,255,.1);z-index:1;box-shadow:0 24px 80px rgba(0,0,0,.55),0 0 0 1px rgba(255,255,255,.06)}
 .player-photo img{width:100%;height:100%;object-fit:cover;display:none}
 .player-badge{position:absolute;top:18px;left:18px}
 .player-cta{display:flex;gap:12px;justify-content:center;align-items:center;flex-wrap:wrap;z-index:1}
@@ -296,7 +293,7 @@ select.inp option{color:#111;background:#fff}
 .player-stage.t5{flex-direction:column-reverse;padding:40px 32px 24px}
 .player-stage.no-photo .player-photo{display:none}
 .player-stage.no-photo .p-name{font-size:clamp(52px,12vw,88px)}
-#confetti{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+#confetti{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:0}
 .fullscreen-btn{position:absolute;top:18px;right:18px;width:32px;height:32px;border-radius:8px;background:rgba(255,255,255,.06);border:1px solid var(--stroke2);display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--muted);font-size:13px;transition:all .15s;z-index:2}
 .fullscreen-btn:hover{background:rgba(255,255,255,.12);color:#fff}
 .footer{display:flex;justify-content:space-between;align-items:center;padding:16px;margin-top:16px;color:var(--muted2);font-size:11px;font-family:'DM Mono',monospace}
@@ -329,38 +326,19 @@ select.inp option{color:#111;background:#fff}
 @keyframes typing{from{width:0;max-width:0}to{width:100%;max-width:100%}}
 @keyframes blink{50%{border-color:transparent}}
 .spinner{width:16px;height:16px;border-radius:50%;border:2px solid rgba(255,255,255,.15);border-top-color:#fff;animation:spin .65s linear infinite;display:inline-block;vertical-align:middle}
-/* ── Countdown ─────────────────────────────────────── */
+/* ── Countdown */
 .countdown-wrap{display:none;flex-direction:column;align-items:center;gap:10px;z-index:1}
 .countdown-wrap.visible{display:flex}
 .countdown-label{font-size:10px;text-transform:uppercase;letter-spacing:.14em;color:var(--muted2);font-family:'DM Mono',monospace;font-weight:500}
 .countdown-strip{display:flex;gap:10px;font-family:'DM Mono',monospace}
-.cd-unit{
-  position:relative;background:rgba(255,255,255,.06);
-  border:1px solid rgba(255,255,255,.1);border-radius:14px;
-  padding:10px 14px;text-align:center;min-width:60px;
-  overflow:hidden;
-  box-shadow:0 4px 16px rgba(0,0,0,.3),0 1px 0 rgba(255,255,255,.06) inset
-}
+.cd-unit{position:relative;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:10px 14px;text-align:center;min-width:60px;overflow:hidden;box-shadow:0 4px 16px rgba(0,0,0,.3),0 1px 0 rgba(255,255,255,.06) inset}
 .cd-unit::before{content:'';position:absolute;left:0;right:0;top:50%;height:1px;background:rgba(0,0,0,.25);z-index:2}
-.cd-val{
-  font-size:26px;font-weight:700;line-height:1;display:block;
-  color:#fff;letter-spacing:-.02em;
-  transition:transform .18s cubic-bezier(.34,1.56,.64,1),opacity .18s ease
-}
+.cd-val{font-size:26px;font-weight:700;line-height:1;display:block;color:#fff;letter-spacing:-.02em;transition:transform .18s cubic-bezier(.34,1.56,.64,1),opacity .18s ease}
 .cd-val.flip{transform:translateY(-6px) scale(.9);opacity:0}
 .cd-lbl{font-size:9px;color:var(--muted2);letter-spacing:.1em;display:block;margin-top:4px;text-transform:uppercase}
-/* birthday-today state */
 .countdown-wrap.birthday-today .countdown-strip{display:none}
 .countdown-wrap.birthday-today .countdown-label{display:none}
-.birthday-today-msg{
-  display:none;font-size:clamp(14px,3vw,18px);font-weight:700;
-  text-align:center;letter-spacing:-.01em;
-  background:linear-gradient(90deg,var(--a),#fff,var(--a));
-  background-size:200% 100%;
-  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
-  background-clip:text;
-  animation:shimmer 2s linear infinite;
-}
+.birthday-today-msg{display:none;font-size:clamp(14px,3vw,18px);font-weight:700;text-align:center;letter-spacing:-.01em;background:linear-gradient(90deg,var(--a),#fff,var(--a));background-size:200% 100%;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:shimmer 2s linear infinite}
 .countdown-wrap.birthday-today .birthday-today-msg{display:block}
 @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
 /* Reactions */
@@ -386,16 +364,13 @@ select.inp option{color:#111;background:#fff}
   <div class="bgfx-orb orb-3"></div>
   <canvas class="bg-stars" id="bgStars"></canvas>
 </div>
-<!-- IMPROVEMENT 2: Queued toast container -->
 <div class="toast-container" id="toastContainer" aria-live="polite" aria-atomic="false"></div>
 
-<!-- IMPROVEMENT 4: Mobile preview FAB -->
 <button class="preview-fab" id="previewFab" aria-label="Open live preview">
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
   Preview
 </button>
 
-<!-- IMPROVEMENT 4: Bottom sheet -->
 <div class="sheet-backdrop" id="sheetBackdrop"></div>
 <div class="bottom-sheet" id="bottomSheet" role="dialog" aria-label="Live preview" aria-modal="true">
   <div class="sheet-handle" id="sheetHandle"></div>
@@ -454,7 +429,6 @@ select.inp option{color:#111;background:#fff}
               <input id="dateInput" class="inp" type="date" />
             </div>
           </div>
-          <!-- IMPROVEMENT 6: Message template presets -->
           <div class="field">
             <label class="lbl">Quick Templates</label>
             <div class="template-pills" role="group" aria-label="Message presets">
@@ -462,7 +436,7 @@ select.inp option{color:#111;background:#fff}
               <button class="tmpl-pill" type="button" data-preset="funny">😂 Funny</button>
               <button class="tmpl-pill" type="button" data-preset="professional">💼 Professional</button>
               <button class="tmpl-pill" type="button" data-preset="poetic">🌸 Poetic</button>
-              <button class="tmpl-pill" type="button" data-preset="short">✨ Short & Sweet</button>
+              <button class="tmpl-pill" type="button" data-preset="short">✨ Short &amp; Sweet</button>
             </div>
           </div>
           <div class="field">
@@ -517,7 +491,6 @@ select.inp option{color:#111;background:#fff}
               </select>
             </div>
           </div>
-          <!-- IMPROVEMENT 5: Accessible swatch bar with role=radiogroup -->
           <div class="swatch-bar" id="swatchBar" role="radiogroup" aria-label="Colour theme swatches" tabindex="0"></div>
         </div>
         <!-- Step 3 -->
@@ -545,7 +518,6 @@ select.inp option{color:#111;background:#fff}
             <div class="step-num">04</div>
             <div class="step-title">Generate &amp; Share</div>
           </div>
-          <!-- IMPROVEMENT 7: Link expiry select -->
           <div class="field" style="margin-bottom:16px">
             <label class="lbl" for="expirySelect">⏳ Link Expiry</label>
             <select id="expirySelect" class="inp" style="max-width:220px">
@@ -570,23 +542,24 @@ select.inp option{color:#111;background:#fff}
             </div>
             <div class="share-link-row">
               <input id="shareLink" class="inp share-inp" readonly placeholder="Link appears here..." />
-              <!-- IMPROVEMENT 3: Copy button with checkmark morph -->
               <button id="copyBtn" class="btn btn-icon" type="button" title="Copy link" aria-label="Copy link">
-                <span class="copy-icon"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span>
-                <span class="copy-check"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg></span>
+                <span class="copy-icon">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                </span>
+                <span class="copy-check">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+                </span>
               </button>
               <a id="openLinkBtn" class="btn btn-icon" href="#" target="_blank" title="Open link" style="display:none">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
               </a>
             </div>
-            <!-- URL length indicator -->
             <div class="url-meta">
               <span id="urlLenText">0 chars</span>
               <div class="url-len-bar"><div class="url-len-fill" id="urlLenFill"></div></div>
               <span class="url-compress-badge" id="savingsBadge"></span>
             </div>
-
-            <!-- LINK PREVIEW CARD -->
+            <!-- Link Preview -->
             <div class="link-preview" id="linkPreview">
               <div class="lp-banner">
                 <div class="lp-banner-bg" id="lpBannerBg"></div>
@@ -605,19 +578,17 @@ select.inp option{color:#111;background:#fff}
               </div>
               <div class="lp-url" id="lpUrl"></div>
             </div>
-
             <!-- QR Section -->
             <div class="qr-section">
               <div class="qr-header">
                 <div class="qr-label">Themed QR Code</div>
                 <div class="qr-hint">Canvas-rendered · scan to open</div>
               </div>
-              <!-- QR style buttons -->
               <div class="qr-style-row" role="group" aria-label="QR code style">
-                <button class="qr-style-btn active" data-style="square" id="qrStyleSquare" aria-pressed="true">■ Square</button>
-                <button class="qr-style-btn" data-style="round" id="qrStyleRound" aria-pressed="false">● Rounded</button>
-                <button class="qr-style-btn" data-style="dots" id="qrStyleDots" aria-pressed="false">· · Dots</button>
-                <button class="qr-style-btn" data-style="logo" id="qrStyleLogo" aria-pressed="false">⬛ + Logo</button>
+                <button class="qr-style-btn active" data-style="square" aria-pressed="true">■ Square</button>
+                <button class="qr-style-btn" data-style="round" aria-pressed="false">● Rounded</button>
+                <button class="qr-style-btn" data-style="dots" aria-pressed="false">· · Dots</button>
+                <button class="qr-style-btn" data-style="logo" aria-pressed="false">⬛ + Logo</button>
               </div>
               <div id="qrWrap" class="qr-wrap">
                 <div class="qr-ph"><div class="qr-ph-icon">⬛</div><div>QR appears after generating</div></div>
@@ -665,7 +636,6 @@ select.inp option{color:#111;background:#fff}
             <img id="livePhoto" alt="photo" />
             <div class="ph-fallback">📸 Your Photo</div>
           </div>
-          <!-- Mini countdown in live preview -->
           <div id="liveCountdown" style="display:none;flex-direction:column;align-items:center;gap:6px;z-index:1">
             <div style="font-size:9px;text-transform:uppercase;letter-spacing:.1em;color:var(--muted2);font-family:'DM Mono',monospace" id="liveCountdownLabel"></div>
             <div style="display:flex;gap:7px;font-family:'DM Mono',monospace">
@@ -689,7 +659,6 @@ select.inp option{color:#111;background:#fff}
     <div class="player-wrap">
       <div class="player-stage" id="playerStage">
         <canvas id="confetti"></canvas>
-        <!-- IMPROVEMENT 7: Expired overlay -->
         <div class="expired-screen" id="expiredScreen">
           <div class="expired-icon">⏳</div>
           <div class="expired-title">This wish has expired</div>
@@ -728,7 +697,6 @@ select.inp option{color:#111;background:#fff}
           <button class="reaction-btn" data-emoji="🎂">🎂<span class="r-count" id="rc2">0</span></button>
           <button class="reaction-btn" data-emoji="🥂">🥂<span class="r-count" id="rc3">0</span></button>
         </div>
-        <!-- IMPROVEMENT 7: Expiry notice -->
         <div class="expiry-notice" id="expiryNotice"></div>
         <div class="player-cta">
           <button id="replayBtn" class="btn btn-primary" type="button">🎉 Replay</button>
@@ -758,14 +726,18 @@ let currentQrStyle   = "square";
 let lastPayload      = null;
 
 /* ═══════════════════════════════════════════════════════
-   COMPRESSION — LZ77-based inline (no lib needed)
+   LZ COMPRESSION — fixed to handle edge cases
    ═══════════════════════════════════════════════════════ */
 
 function lzCompress(str) {
+  if (!str || str.length === 0) return [];
   const dict = {};
-  let data = (str + "").split(""), out = [], currChar, phrase = data[0], code = 256;
+  const data = str.split("");
+  const out  = [];
+  let phrase = data[0];
+  let code   = 256;
   for (let i = 1; i < data.length; i++) {
-    currChar = data[i];
+    const currChar = data[i];
     if (dict[phrase + currChar] != null) {
       phrase += currChar;
     } else {
@@ -775,20 +747,28 @@ function lzCompress(str) {
       phrase = currChar;
     }
   }
-  out.push(phrase.length > 1 ? dict[phrase] : phrase.charCodeAt(0));
+  /* FIX: always push last phrase */
+  if (phrase.length > 0) {
+    out.push(phrase.length > 1 ? (dict[phrase] != null ? dict[phrase] : phrase.charCodeAt(0)) : phrase.charCodeAt(0));
+  }
   return out;
 }
 
 function lzDecompress(compressed) {
+  if (!compressed || compressed.length === 0) return "";
   const dict = {};
-  let currChar = String.fromCharCode(compressed[0]);
-  let oldPhrase = currChar, out = [currChar], code = 256, phrase;
+  let currChar  = String.fromCharCode(compressed[0]);
+  let oldPhrase = currChar;
+  const out     = [currChar];
+  let code      = 256;
   for (let i = 1; i < compressed.length; i++) {
     const currCode = compressed[i];
+    let phrase;
     if (currCode < 256) {
       phrase = String.fromCharCode(currCode);
     } else {
-      phrase = dict[currCode] ? dict[currCode] : oldPhrase + currChar;
+      /* FIX: guard undefined dict entry */
+      phrase = dict[currCode] !== undefined ? dict[currCode] : (oldPhrase + currChar);
     }
     out.push(phrase);
     currChar = phrase.charAt(0);
@@ -803,13 +783,15 @@ function packCodes(codes) {
   const buf = new Uint8Array(codes.length * 2);
   for (let i = 0; i < codes.length; i++) {
     buf[i*2]   = (codes[i] >> 8) & 0xFF;
-    buf[i*2+1] = codes[i] & 0xFF;
+    buf[i*2+1] =  codes[i]       & 0xFF;
   }
   return buf;
 }
 function unpackCodes(buf) {
   const codes = [];
-  for (let i = 0; i < buf.length; i += 2) codes.push((buf[i] << 8) | buf[i+1]);
+  for (let i = 0; i < buf.length; i += 2) {
+    codes.push((buf[i] << 8) | buf[i+1]);
+  }
   return codes;
 }
 
@@ -819,8 +801,8 @@ function b64u(bytes) {
   return btoa(b).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
 }
 function b64uDec(s) {
-  const b64 = s.replace(/-/g,"+").replace(/_/g,"/");
-  const bin = atob(b64);
+  const b64  = s.replace(/-/g,"+").replace(/_/g,"/");
+  const bin  = atob(b64);
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   return bytes;
@@ -833,9 +815,11 @@ const KEY_UNMAP = Object.fromEntries(Object.entries(KEY_MAP).map(([k,v])=>[v,k])
 function slimPayload(p) {
   const s = {};
   for (const [k,v] of Object.entries(p)) {
-    if (k==="v") continue;
+    if (k === "v") continue;
     if (v === "" || v == null) continue;
-    if (DEFAULTS[k] === v) continue;
+    /* FIX: don't skip expiry:0 here — skip only if truly default (0 means no expiry, keep it) */
+    if (k !== "expiry" && DEFAULTS[k] === v) continue;
+    if (k === "expiry" && (v === 0 || v === "0")) continue; /* 0 = no expiry, safe to omit */
     const sk = KEY_MAP[k] || k;
     s[sk] = v;
   }
@@ -849,11 +833,12 @@ function expandPayload(s) {
     p[k] = v;
   }
   for (const [k,v] of Object.entries(DEFAULTS)) { if (p[k] == null) p[k] = v; }
-  if (!p.name) p.name = "Friend";
-  if (!p.msg)  p.msg  = "Wishing you a day full of joy, laughter, and love. Happy Birthday! 🎉";
+  if (!p.name)  p.name  = "Friend";
+  if (!p.msg)   p.msg   = "Wishing you a day full of joy, laughter, and love. Happy Birthday! 🎉";
   if (!p.photo) p.photo = "";
   if (!p.date)  p.date  = "";
-  if (!p.expiry) p.expiry = 0;
+  /* FIX: expiry absent → 0 (no expiry); parse as number */
+  p.expiry = p.expiry != null ? Number(p.expiry) : 0;
   return p;
 }
 
@@ -863,16 +848,17 @@ function encodePayload(payload) {
   try {
     const codes  = lzCompress(json);
     const packed = packCodes(codes);
-    const result = "z" + b64u(packed);
-    const plain = "p" + b64u(new TextEncoder().encode(json));
-    return result.length < plain.length ? result : plain;
+    const lzResult = "z" + b64u(packed);
+    const plain    = "p" + b64u(new TextEncoder().encode(json));
+    return lzResult.length < plain.length ? lzResult : plain;
   } catch(e) {
+    console.warn("LZ compress failed, using plain:", e);
     return "p" + b64u(new TextEncoder().encode(json));
   }
 }
 
 function decodePayload(encoded) {
-  if (!encoded) throw new Error("Empty");
+  if (!encoded) throw new Error("Empty payload");
   const type = encoded[0];
   const data = encoded.slice(1);
   let json;
@@ -881,6 +867,7 @@ function decodePayload(encoded) {
     const codes = unpackCodes(bytes);
     json = lzDecompress(codes);
   } else {
+    /* plain base64url — legacy and current fallback */
     const bytes = b64uDec(data);
     json = new TextDecoder().decode(bytes);
   }
@@ -889,9 +876,9 @@ function decodePayload(encoded) {
 
 function legacyDecode(b64) {
   try {
-    const bin = atob(b64.replace(/-/g,"+").replace(/_/g,"/"));
+    const bin   = atob(b64.replace(/-/g,"+").replace(/_/g,"/"));
     const bytes = new Uint8Array(bin.length);
-    for (let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
     return JSON.parse(new TextDecoder().decode(bytes));
   } catch {
     try { return JSON.parse(decodeURIComponent(escape(atob(b64)))); } catch {}
@@ -946,37 +933,31 @@ const TEMPLATES = [
 ];
 
 /* ═══════════════════════════════════════════════════════
-   CANVAS QR RENDERER v3 — Matrix-direct approach
-   Reads qrcode.js internal _oQRCode.isDark(r,c) directly.
-   No pixel sampling. No fragile image analysis. Scannable.
+   COLOUR UTILS
    ═══════════════════════════════════════════════════════ */
-
 function hexToRgb(hex) {
   const h = hex.replace("#","");
-  return { r:parseInt(h.slice(0,2),16), g:parseInt(h.slice(2,4),16), b:parseInt(h.slice(4,6),16) };
+  return {
+    r: parseInt(h.slice(0,2),16),
+    g: parseInt(h.slice(2,4),16),
+    b: parseInt(h.slice(4,6),16)
+  };
 }
-
 function srgbLinear(v) {
   v /= 255;
   return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
 }
-
 function luminance(hex) {
   const {r,g,b} = hexToRgb(hex);
   return 0.2126*srgbLinear(r) + 0.7152*srgbLinear(g) + 0.0722*srgbLinear(b);
 }
-
 function isColorDark(hex) { return luminance(hex) < 0.179; }
-
 function contrastRatio(h1, h2) {
   const l1 = luminance(h1), l2 = luminance(h2);
   return (Math.max(l1,l2) + 0.05) / (Math.min(l1,l2) + 0.05);
 }
-
-/* Pick fg/bg from theme ensuring contrast ≥ 4 for scanner reliability */
 function getQrPalette(theme) {
   const lA = luminance(theme.a), lB = luminance(theme.b);
-  // darker color → fg candidate, lighter → bg candidate
   const [dark, light] = lB <= lA ? [theme.b, theme.a] : [theme.a, theme.b];
   if (contrastRatio(dark, light) >= 4) return { fg: dark, bg: light };
   if (contrastRatio("#000000", light) >= 4) return { fg: "#000000", bg: light };
@@ -984,43 +965,100 @@ function getQrPalette(theme) {
   return { fg: "#111111", bg: "#ffffff" };
 }
 
-function roundRectPath(ctx, x, y, w, h, r) {
+/* ═══════════════════════════════════════════════════════
+   QR RENDERER — uses qrcode.js hidden div then reads canvas pixels
+   FIX: removed _oQRCode internal access; use image data approach instead
+   ═══════════════════════════════════════════════════════ */
+
+function rrect(ctx, x, y, w, h, r) {
+  r = Math.min(r, w/2, h/2);
   ctx.moveTo(x+r, y);
-  ctx.lineTo(x+w-r, y); ctx.arcTo(x+w, y, x+w, y+r, r);
+  ctx.lineTo(x+w-r, y); ctx.arcTo(x+w, y,   x+w, y+r,   r);
   ctx.lineTo(x+w, y+h-r); ctx.arcTo(x+w, y+h, x+w-r, y+h, r);
-  ctx.lineTo(x+r, y+h); ctx.arcTo(x, y+h, x, y+h-r, r);
-  ctx.lineTo(x, y+r); ctx.arcTo(x, y, x+r, y, r);
+  ctx.lineTo(x+r, y+h);   ctx.arcTo(x, y+h,   x, y+h-r,  r);
+  ctx.lineTo(x, y+r);     ctx.arcTo(x, y,     x+r, y,     r);
   ctx.closePath();
 }
 
-function rrect(ctx, x, y, w, h, r) {
-  if (ctx.roundRect) ctx.roundRect(x, y, w, h, r);
-  else roundRectPath(ctx, x, y, w, h, r);
+/*
+  FIX: renderThemedQR now:
+  1. Creates a hidden div, lets qrcode.js render its own table-based QR
+  2. Reads the table cells to get the boolean matrix — 100% reliable
+  3. Renders our custom styled canvas from that matrix
+*/
+function getQRMatrix(url, ecLevel) {
+  const container = document.createElement("div");
+  container.style.cssText = "position:absolute;left:-99999px;top:-99999px;visibility:hidden;pointer-events:none;width:1px;height:1px;overflow:hidden";
+  document.body.appendChild(container);
+  try {
+    new QRCode(container, {
+      text: url,
+      width: 256,
+      height: 256,
+      correctLevel: ecLevel
+    });
+    /* qrcode.js renders a <table> for non-canvas, or a <canvas> + <img> */
+    /* Try table first (most reliable for matrix extraction) */
+    const table = container.querySelector("table");
+    if (table) {
+      const rows = table.querySelectorAll("tr");
+      const matrix = [];
+      rows.forEach(row => {
+        const cells = row.querySelectorAll("td");
+        const rowData = [];
+        cells.forEach(cell => {
+          /* dark cell = module ON */
+          rowData.push(cell.style.backgroundColor !== "" &&
+                       cell.style.backgroundColor !== "rgb(255, 255, 255)" &&
+                       cell.style.backgroundColor !== "white");
+        });
+        if (rowData.length > 0) matrix.push(rowData);
+      });
+      if (matrix.length > 0) return matrix;
+    }
+    /* Fallback: read from rendered canvas via pixel sampling */
+    const qrCanvas = container.querySelector("canvas");
+    if (qrCanvas) {
+      const size = qrCanvas.width;
+      const ctx  = qrCanvas.getContext("2d");
+      const imgData = ctx.getImageData(0, 0, size, size);
+      /* Determine module size by scanning first row for alternating dark/light */
+      /* QR always starts with finder: 7 dark, 1 light at minimum */
+      /* Heuristic: try module sizes 2..20 */
+      let moduleSize = 0;
+      for (let ms = 2; ms <= 20; ms++) {
+        if (size % ms === 0 || Math.abs(size - Math.round(size/ms)*ms) < ms) {
+          moduleSize = ms; break;
+        }
+      }
+      if (moduleSize < 2) moduleSize = Math.round(size / 25);
+      const N = Math.round(size / moduleSize);
+      const matrix = [];
+      for (let r = 0; r < N; r++) {
+        const row = [];
+        for (let c = 0; c < N; c++) {
+          const px = Math.floor((r + 0.5) * moduleSize);
+          const py = Math.floor((c + 0.5) * moduleSize);
+          const idx = (px * size + py) * 4;
+          const brightness = imgData.data[idx] + imgData.data[idx+1] + imgData.data[idx+2];
+          row.push(brightness < 380);
+        }
+        matrix.push(row);
+      }
+      return matrix;
+    }
+  } finally {
+    container.remove();
+  }
+  throw new Error("Could not extract QR matrix");
 }
 
-/* ── Core renderer — fully synchronous, no pixel I/O ── */
 function renderThemedQR(url, theme, style) {
-  /* Error Correction: H (30% recovery) for logo overlay, M for others */
   const ecLevel = (style === "logo") ? QRCode.CorrectLevel.H : QRCode.CorrectLevel.M;
+  const matrix  = getQRMatrix(url, ecLevel);
+  const N = matrix.length;
+  if (N < 10) throw new Error("QR matrix too small: " + N);
 
-  /* Instantiate qrcode.js — _oQRCode is populated synchronously */
-  const tmpDiv = document.createElement("div");
-  tmpDiv.style.cssText = "position:absolute;left:-9999px;top:-9999px;visibility:hidden;pointer-events:none";
-  document.body.appendChild(tmpDiv);
-  let model;
-  try {
-    const qr = new QRCode(tmpDiv, { text: url, correctLevel: ecLevel });
-    model = qr._oQRCode;        // <-- direct matrix access, no pixel reading
-  } finally {
-    tmpDiv.remove();
-  }
-
-  if (!model || typeof model.isDark !== "function")
-    throw new Error("qrcode.js _oQRCode unavailable — verify CDN loaded");
-
-  const N = model.moduleCount;  // e.g. 21, 25, 29 … 177
-
-  /* Canvas geometry — 4-module quiet zone on each side (QR spec) */
   const QUIET    = 4;
   const SIZE     = 512;
   const cellSize = SIZE / (N + QUIET * 2);
@@ -1033,17 +1071,18 @@ function renderThemedQR(url, theme, style) {
   canvas.width = canvas.height = SIZE;
   const ctx = canvas.getContext("2d");
 
-  /* ── Background with subtle radial tint */
+  /* Background */
   ctx.fillStyle = bgHex;
   ctx.fillRect(0, 0, SIZE, SIZE);
 
+  /* Subtle radial tint */
   const tint = ctx.createRadialGradient(SIZE/2, SIZE/2, 0, SIZE/2, SIZE/2, SIZE * 0.72);
   tint.addColorStop(0, `rgba(${fgRgb.r},${fgRgb.g},${fgRgb.b},0.055)`);
   tint.addColorStop(1, `rgba(${fgRgb.r},${fgRgb.g},${fgRgb.b},0)`);
   ctx.fillStyle = tint;
   ctx.fillRect(0, 0, SIZE, SIZE);
 
-  /* ── Gradient fill for data modules (only when contrast stays safe) */
+  /* Gradient data fill — verify contrast */
   let dataFill = fgHex;
   const altColor = (theme.a !== fgHex) ? theme.a : null;
   if (altColor && contrastRatio(altColor, bgHex) >= 3.8) {
@@ -1053,67 +1092,56 @@ function renderThemedQR(url, theme, style) {
     dataFill = mg;
   }
 
-  /* ── Helpers */
   const isFinder = (r, c) =>
     (r < 7 && c < 7) || (r < 7 && c >= N-7) || (r >= N-7 && c < 7);
 
-  /* ── Draw data & functional modules (skip finder zones — drawn below) */
+  /* Data modules */
   for (let r = 0; r < N; r++) {
-    for (let c = 0; c < N; c++) {
-      if (!model.isDark(r, c)) continue;
-      if (isFinder(r, c)) continue;   // finder patterns redrawn styled below
-
+    for (let c = 0; c < matrix[r].length; c++) {
+      if (!matrix[r][c]) continue;
+      if (isFinder(r, c)) continue;
       const x  = margin + c * cellSize;
       const y  = margin + r * cellSize;
       const s  = cellSize * (style === "dots" ? 0.80 : 0.84);
       const ox = (cellSize - s) / 2;
-
       ctx.fillStyle = dataFill;
       ctx.beginPath();
-
       if (style === "dots") {
         ctx.arc(x + cellSize/2, y + cellSize/2, s/2, 0, Math.PI*2);
       } else if (style === "round" || style === "logo") {
         rrect(ctx, x+ox, y+ox, s, s, s * 0.36);
       } else {
-        /* square — hairline rounding for antialiased look */
         rrect(ctx, x+ox, y+ox, s, s, s * 0.10);
       }
       ctx.fill();
     }
   }
 
-  /* ── Styled finder patterns
-       Structure: 7×7 outer fill → 5×5 bg cutout → 3×3 inner dot
-       This exactly matches the QR spec and looks clean at any style. */
+  /* Styled finder patterns */
   function drawFinder(startR, startC) {
     const fx = margin + startC * cellSize;
     const fy = margin + startR * cellSize;
     const fw = 7 * cellSize;
-    const gap = cellSize;          // separator gap = 1 module
+    const gap = cellSize;
     const dotSize = 3 * cellSize;
     const dotX = fx + 2 * cellSize, dotY = fy + 2 * cellSize;
-
     const outerR = cellSize * (style === "dots" ? 3.6 : style === "round" ? 1.6 : 0.55);
     const innerR = cellSize * (style === "dots" ? 1.5 : style === "round" ? 0.85 : 0.35);
 
-    /* Outer 7×7 fill */
     ctx.fillStyle = fgHex;
     ctx.beginPath();
     rrect(ctx, fx, fy, fw, fw, outerR);
     ctx.fill();
 
-    /* 5×5 background cutout */
     ctx.fillStyle = bgHex;
     ctx.beginPath();
     rrect(ctx, fx + gap, fy + gap, fw - gap*2, fw - gap*2, outerR * 0.55);
     ctx.fill();
 
-    /* 3×3 inner dot */
     ctx.fillStyle = fgHex;
     ctx.beginPath();
     if (style === "dots") {
-      ctx.arc(fx + fw/2, fy + fw/2, dotSize/2 * 0.92, 0, Math.PI*2);
+      ctx.arc(fx + fw/2, fy + fw/2, (dotSize/2) * 0.92, 0, Math.PI*2);
     } else {
       rrect(ctx, dotX, dotY, dotSize, dotSize, innerR);
     }
@@ -1124,13 +1152,12 @@ function renderThemedQR(url, theme, style) {
   drawFinder(0,   N-7);
   drawFinder(N-7, 0  );
 
-  /* ── Logo overlay (ECC H — 30% of codewords recoverable) */
+  /* Logo overlay */
   if (style === "logo") {
     const lw = SIZE * 0.155, lh = SIZE * 0.155;
-    const lx = (SIZE - lw) / 2, ly = (SIZE - lh) / 2;
+    const lx = (SIZE - lw) / 2,  ly = (SIZE - lh) / 2;
     const pad = cellSize * 0.9;
 
-    /* White backing with subtle border */
     ctx.fillStyle = bgHex;
     ctx.beginPath();
     rrect(ctx, lx - pad, ly - pad, lw + pad*2, lh + pad*2, lw * 0.22);
@@ -1150,21 +1177,23 @@ function renderThemedQR(url, theme, style) {
     } else {
       ctx.fillStyle = fgHex;
       ctx.font = `700 ${Math.round(lw * 0.52)}px 'Outfit', system-ui`;
-      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
       ctx.fillText("W", SIZE/2, SIZE/2);
     }
   }
 
-  /* ── Branding watermark (very subtle) */
+  /* Watermark */
   ctx.globalAlpha = 0.38;
-  ctx.fillStyle = fgHex;
+  ctx.fillStyle   = fgHex;
   ctx.font = `400 ${Math.round(SIZE * 0.022)}px 'DM Mono', monospace`;
-  ctx.textAlign = "center"; ctx.textBaseline = "bottom";
+  ctx.textAlign     = "center";
+  ctx.textBaseline  = "bottom";
   ctx.fillText("WishCraft", SIZE/2, SIZE - 3);
   ctx.globalAlpha = 1;
 
   lastQrCanvas = canvas;
-  return canvas;   /* synchronous — caller may await or call directly */
+  return canvas;
 }
 
 /* ═══════════════════════════════════════════════════════
@@ -1176,8 +1205,10 @@ function updateLinkPreview(payload, shareUrl, theme) {
   const bg = document.getElementById("lpBannerBg");
   if (bg) bg.style.background = `linear-gradient(135deg, ${theme.a}, ${theme.b})`;
   const lpTitle = document.getElementById("lpTitle");
-  if (lpTitle) lpTitle.textContent = `Happy Birthday, ${name}! 🎂`;
-  lpTitle.style.color = isColorDark(theme.b) ? "#fff" : "#111";
+  if (lpTitle) {
+    lpTitle.textContent = `Happy Birthday, ${name}! 🎂`;
+    lpTitle.style.color = isColorDark(theme.b) ? "#fff" : "#111";
+  }
   const lpSub = document.getElementById("lpSub");
   if (lpSub) lpSub.style.color = isColorDark(theme.b) ? "rgba(255,255,255,.7)" : "rgba(0,0,0,.6)";
   const lpDesc = document.getElementById("lpDesc");
@@ -1188,24 +1219,25 @@ function updateLinkPreview(payload, shareUrl, theme) {
   const lpPhoto = document.getElementById("lpPhoto");
   if (lpPhoto) {
     if (payload.photo) { lpPhoto.src = payload.photo; lpPhoto.classList.add("visible"); }
-    else lpPhoto.classList.remove("visible");
+    else               { lpPhoto.src = ""; lpPhoto.classList.remove("visible"); }
   }
   lp.classList.add("visible");
 }
 
 function updateUrlMeter(shareUrl) {
-  const len = shareUrl.length;
+  const len  = shareUrl.length;
   const fill = document.getElementById("urlLenFill");
   const text = document.getElementById("urlLenText");
-  const badge = document.getElementById("savingsBadge");
-  const approxUncompressed = location.origin.length + location.pathname.length + 10 + Math.ceil(safeText(document.getElementById("msgInput")?.value||"",220).length * 1.4) + 200;
+  const badge= document.getElementById("savingsBadge");
+  const msgLen = document.getElementById("msgInput")?.value?.length || 0;
+  const approxUncompressed = location.origin.length + location.pathname.length + 10 + Math.ceil(msgLen * 1.4) + 200;
   const savings = Math.max(0, Math.round((1 - len / approxUncompressed) * 100));
-  if (text) text.textContent = `${len} chars`;
+  if (text)  text.textContent  = `${len} chars`;
   if (badge) badge.textContent = savings > 5 ? `~${savings}% smaller` : "compact";
   const pct = Math.min(100, (len / 2000) * 100);
   if (fill) {
     fill.style.width = pct + "%";
-    fill.className = "url-len-fill " + (pct < 40 ? "url-len-ok" : pct < 70 ? "url-len-warn" : "url-len-bad");
+    fill.className   = "url-len-fill " + (pct < 40 ? "url-len-ok" : pct < 70 ? "url-len-warn" : "url-len-bad");
   }
 }
 
@@ -1213,25 +1245,28 @@ function updateUrlMeter(shareUrl) {
    HELPERS
    ═══════════════════════════════════════════════════════ */
 const $ = id => document.getElementById(id);
-const qs = (sel, ctx=document) => ctx.querySelector(sel);
 
-function safeText(s, max=220) { return String(s||"").replace(/\s+/g," ").trim().slice(0,max); }
+function safeText(s, max=220) {
+  return String(s||"").replace(/\s+/g," ").trim().slice(0, max);
+}
 
 function calcAge(dateStr) {
   if (!dateStr) return null;
-  const today=new Date(), dob=new Date(dateStr);
+  const today = new Date(), dob = new Date(dateStr);
   if (isNaN(dob.getTime())) return null;
-  let age=today.getFullYear()-dob.getFullYear();
-  const m=today.getMonth()-dob.getMonth();
-  if (m<0||(m===0&&today.getDate()<dob.getDate())) age--;
-  return (age>=0&&age<150)?age:null;
+  let age = today.getFullYear() - dob.getFullYear();
+  const m = today.getMonth() - dob.getMonth();
+  if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
+  return (age >= 0 && age < 150) ? age : null;
 }
-function ordinal(n){const s=["th","st","nd","rd"],v=n%100;return n+(s[(v-20)%10]||s[v]||s[0])}
+function ordinal(n) {
+  const s = ["th","st","nd","rd"], v = n % 100;
+  return n + (s[(v-20)%10] || s[v] || s[0]);
+}
 
 const TOAST_ICONS = { success:"✅", error:"❌", info:"ℹ️" };
 function toast(msg, type="info") {
-  const container = document.getElementById("toastContainer");
-  if (!container) return;
+  const container = document.getElementById("toastContainer"); if (!container) return;
   const el = document.createElement("div");
   el.className = "toast " + type;
   el.innerHTML = `<span class="toast-icon">${TOAST_ICONS[type]||"ℹ️"}</span><span>${msg}</span>`;
@@ -1252,37 +1287,41 @@ function triggerCopyMorph(btn) {
 }
 
 const MSG_PRESETS = {
-  heartfelt: "You bring so much light into my life. On your special day, I hope the world reflects back all the warmth and love you give so freely. Happy Birthday! 🎂❤️",
-  funny: "Happy Birthday! You're not old — you're vintage. Like fine wine, except wine gets better with age and you just get more… distinguished. 😂🍷 Cheers to you!",
+  heartfelt:    "You bring so much light into my life. On your special day, I hope the world reflects back all the warmth and love you give so freely. Happy Birthday! 🎂❤️",
+  funny:        "Happy Birthday! You're not old — you're vintage. Like fine wine, except wine gets better with age and you just get more… distinguished. 😂🍷 Cheers to you!",
   professional: "Wishing you a wonderful birthday filled with continued success and joy. Your dedication inspires everyone around you. Here's to another great year ahead! 🥂",
-  poetic: "Another year written in the stars, another chapter of your beautiful story. May every day ahead shine as brightly as you do. Happy Birthday, dear one. 🌸✨",
-  short: "Happy Birthday! 🎉 Hope your day is as amazing as you are! 🎂",
+  poetic:       "Another year written in the stars, another chapter of your beautiful story. May every day ahead shine as brightly as you do. Happy Birthday, dear one. 🌸✨",
+  short:        "Happy Birthday! 🎉 Hope your day is as amazing as you are! 🎂",
 };
 
+/* FIX: isExpired — explicit check; expiry=0 means never */
 function computeExpiryTs(days) {
-  if (!days || days === 0) return 0;
-  return Date.now() + days * 24 * 60 * 60 * 1000;
+  const d = parseInt(days, 10);
+  if (!d || d <= 0) return 0;
+  return Date.now() + d * 24 * 60 * 60 * 1000;
 }
 function isExpired(expiryTs) {
-  if (!expiryTs || expiryTs === 0) return false;
-  return Date.now() > expiryTs;
+  const ts = Number(expiryTs);
+  if (!ts || ts === 0) return false; /* 0 = never expires */
+  return Date.now() > ts;
 }
 function expiryNoticeText(expiryTs) {
-  if (!expiryTs || expiryTs === 0) return null;
-  const diff = expiryTs - Date.now();
+  const ts = Number(expiryTs);
+  if (!ts || ts === 0) return null;
+  const diff = ts - Date.now();
   if (diff <= 0) return null;
   const days  = Math.floor(diff / 864e5);
   const hours = Math.floor((diff % 864e5) / 36e5);
-  if (days > 1)  return { text: `⏰ Link expires in ${days} days`, critical: false };
-  if (days === 1) return { text: `⏰ Link expires in 1 day`, critical: false };
-  if (hours > 0) return { text: `⏰ Link expires in ${hours} hour${hours>1?"s":""}`, critical: true };
+  if (days > 1)   return { text: `⏰ Link expires in ${days} days`,               critical: false };
+  if (days === 1) return { text: `⏰ Link expires in 1 day`,                       critical: false };
+  if (hours > 0)  return { text: `⏰ Link expires in ${hours} hour${hours>1?"s":""}`, critical: true };
   return { text: "⏰ Link expires very soon", critical: true };
 }
 
+/* Sheet */
 let _sheetOpen = false;
-function openSheet() {
-  _sheetOpen = true;
-  syncSheet();
+function openSheet()  {
+  _sheetOpen = true; syncSheet();
   document.getElementById("sheetBackdrop").classList.add("open");
   document.getElementById("bottomSheet").classList.add("open");
   document.getElementById("previewFab").style.display = "none";
@@ -1295,26 +1334,34 @@ function closeSheet() {
   document.getElementById("previewFab").style.display = "";
   document.body.style.overflow = "";
 }
+/* FIX: sheet sync — avoid cloning canvas (causes blank canvas copy) */
 function syncSheet() {
   if (!_sheetOpen) return;
-  const src = document.getElementById("liveStage");
-  const dst = document.getElementById("sheetStageWrap");
-  if (!src || !dst) return;
-  const clone = src.cloneNode(true);
-  clone.style.minHeight = "260px";
-  clone.querySelectorAll("canvas").forEach(c => c.remove());
-  dst.innerHTML = "";
-  dst.appendChild(clone);
+  const dst = document.getElementById("sheetStageWrap"); if (!dst) return;
+  const name  = safeText($("nameInput")?.value || "Friend", 32);
+  const msg   = safeText($("msgInput")?.value  || "", 220);
+  const themeId = $("themeSelect")?.value || "bronzenoir";
+  const theme = THEMES.find(t=>t.id===themeId)||THEMES[0];
+  dst.innerHTML = `
+    <div style="border-radius:16px;padding:24px;min-height:220px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;background:linear-gradient(160deg,rgba(255,255,255,.02),rgba(0,0,0,.18));border:1px solid rgba(255,255,255,.07)">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:.12em;color:rgba(255,255,255,.4);font-family:'DM Mono',monospace">Happy Birthday</div>
+      <div style="font-size:clamp(24px,6vw,36px);font-weight:800;letter-spacing:-.02em;color:#fff;line-height:1.05">${escHtml(name)}</div>
+      <div style="font-size:12px;color:rgba(255,255,255,.55);max-width:90%;line-height:1.55">${escHtml(msg)}</div>
+      ${uploadedPhotoUrl ? `<img src="${uploadedPhotoUrl}" style="width:80px;height:80px;border-radius:12px;object-fit:cover;border:1.5px solid rgba(255,255,255,.12)" />` : ""}
+    </div>`;
+}
+function escHtml(s) {
+  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 }
 function initSheetSwipe() {
   const sheet = document.getElementById("bottomSheet");
   let startY = 0, dragging = false;
-  sheet.addEventListener("touchstart", e => { startY = e.touches[0].clientY; dragging = true; }, { passive: true });
-  sheet.addEventListener("touchmove", e => {
+  sheet.addEventListener("touchstart", e => { startY = e.touches[0].clientY; dragging = true; }, { passive:true });
+  sheet.addEventListener("touchmove",  e => {
     if (!dragging) return;
     const dy = e.touches[0].clientY - startY;
     if (dy > 0) sheet.style.transform = `translateY(${dy}px)`;
-  }, { passive: true });
+  }, { passive:true });
   sheet.addEventListener("touchend", e => {
     const dy = e.changedTouches[0].clientY - startY;
     sheet.style.transform = "";
@@ -1323,71 +1370,86 @@ function initSheetSwipe() {
   });
 }
 
-function setStatus(state,text){
-  const p=$("statusPill"),t=$("statusText"); if(!p) return;
-  p.className="status-pill "+(state||""); if(t) t.textContent=" "+text;
+function setStatus(state, text) {
+  const p = $("statusPill"), t = $("statusText"); if (!p) return;
+  p.className = "status-pill " + (state||""); if (t) t.textContent = " " + text;
 }
-
 function setCSSVars(themeId) {
-  const t=THEMES.find(x=>x.id===themeId)||THEMES[0];
-  document.documentElement.style.setProperty("--a",t.a);
-  document.documentElement.style.setProperty("--b",t.b);
-  qs('meta[name="theme-color"]')?.setAttribute("content",t.b);
+  const t = THEMES.find(x=>x.id===themeId)||THEMES[0];
+  document.documentElement.style.setProperty("--a", t.a);
+  document.documentElement.style.setProperty("--b", t.b);
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", t.b);
   return t;
 }
-function applyEffect(e){
+function applyEffect(e) {
   document.body.classList.remove("fx-glow","fx-sparkle","fx-neon","fx-glass","fx-aurora","fx-cinematic");
-  if(e&&e!=="auto") document.body.classList.add("fx-"+e);
+  if (e && e !== "auto") document.body.classList.add("fx-" + e);
 }
-function applyFont(fontId,themeId){
-  const f=FONTS.find(x=>x.id===fontId);
-  if(!f||fontId==="auto"){
-    const t=THEMES.find(x=>x.id===themeId);
-    document.body.style.fontFamily=isColorDark(t?.b)?"Montserrat,sans-serif":"Poppins,sans-serif";
+function applyFont(fontId, themeId) {
+  const f = FONTS.find(x=>x.id===fontId);
+  if (!f || fontId === "auto") {
+    const t = THEMES.find(x=>x.id===themeId);
+    document.body.style.fontFamily = isColorDark(t?.b) ? "Montserrat,sans-serif" : "Poppins,sans-serif";
     return;
   }
-  document.body.style.fontFamily=f.css;
+  document.body.style.fontFamily = f.css;
 }
 
-function initStars(){
+function initStars() {
   if (window.matchMedia?.("(prefers-reduced-motion:reduce)").matches) return;
-  const c=$("bgStars"); if(!c) return;
-  const ctx=c.getContext("2d");
-  let drawTimer;
-  function draw(){
-    c.width=window.innerWidth; c.height=window.innerHeight;
-    const n=Math.floor(c.width*c.height/9000);
-    ctx.clearRect(0,0,c.width,c.height);
-    for(let i=0;i<n;i++){
-      const x=Math.random()*c.width,y=Math.random()*c.height,r=Math.random()*1.1;
-      ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);
-      ctx.fillStyle=`rgba(255,255,255,${Math.random()*.45+.08})`;ctx.fill();
+  const c = $("bgStars"); if (!c) return;
+  const ctx = c.getContext("2d");
+  let timer;
+  function draw() {
+    c.width  = window.innerWidth;
+    c.height = window.innerHeight;
+    const n = Math.floor(c.width * c.height / 9000);
+    ctx.clearRect(0, 0, c.width, c.height);
+    for (let i = 0; i < n; i++) {
+      ctx.beginPath();
+      ctx.arc(Math.random()*c.width, Math.random()*c.height, Math.random()*1.1, 0, Math.PI*2);
+      ctx.fillStyle = `rgba(255,255,255,${Math.random()*.45+.08})`;
+      ctx.fill();
     }
   }
   draw();
-  window.addEventListener("resize",()=>{clearTimeout(drawTimer);drawTimer=setTimeout(draw,300);});
+  window.addEventListener("resize", () => { clearTimeout(timer); timer = setTimeout(draw,300); });
 }
-function initStageParticles(){
+
+function initStageParticles() {
   if (window.matchMedia?.("(prefers-reduced-motion:reduce)").matches) return;
-  const c=$("stageParticles"); if(!c) return;
-  const ctx=c.getContext("2d");
-  const ps=Array.from({length:18},()=>({x:Math.random(),y:Math.random()+.5,vx:(Math.random()-.5)*.0004,vy:-(Math.random()*.0006+.0002),r:Math.random()*1.8+.5}));
-  function resize(){c.width=c.parentElement.offsetWidth;c.height=c.parentElement.offsetHeight}
-  resize(); new ResizeObserver(resize).observe(c.parentElement);
+  const c = $("stageParticles"); if (!c) return;
+  const ctx = c.getContext("2d");
+  const ps = Array.from({length:18}, () => ({
+    x:  Math.random(),
+    y:  Math.random() + 0.5,
+    vx: (Math.random()-.5) * .0004,
+    vy: -(Math.random()*.0006 + .0002),
+    r:  Math.random()*1.8 + .5
+  }));
+  function resize() {
+    c.width  = c.parentElement.offsetWidth;
+    c.height = c.parentElement.offsetHeight;
+  }
+  resize();
+  new ResizeObserver(resize).observe(c.parentElement);
   let running = true;
   if ("IntersectionObserver" in window) {
-    const io = new IntersectionObserver(([entry]) => { running = entry.isIntersecting; }, { threshold: 0.1 });
-    io.observe(c.parentElement);
+    new IntersectionObserver(([e]) => { running = e.isIntersecting; }, { threshold:0.1 }).observe(c.parentElement);
   }
-  const frame=()=>{
+  const frame = () => {
     if (running) {
-      ctx.clearRect(0,0,c.width,c.height);
-      const ca=getComputedStyle(document.documentElement).getPropertyValue("--a").trim()||"#b38f6f";
-      for(const p of ps){
-        p.x+=p.vx;p.y+=p.vy;
-        if(p.y<-.01)p.y=1.01;if(p.x<0)p.x=1;if(p.x>1)p.x=0;
-        ctx.beginPath();ctx.arc(p.x*c.width,p.y*c.height,p.r,0,Math.PI*2);
-        ctx.fillStyle=ca+"55";ctx.fill();
+      ctx.clearRect(0, 0, c.width, c.height);
+      const ca = getComputedStyle(document.documentElement).getPropertyValue("--a").trim() || "#b38f6f";
+      for (const p of ps) {
+        p.x += p.vx; p.y += p.vy;
+        if (p.y < -.01) p.y = 1.01;
+        if (p.x < 0) p.x = 1;
+        if (p.x > 1) p.x = 0;
+        ctx.beginPath();
+        ctx.arc(p.x*c.width, p.y*c.height, p.r, 0, Math.PI*2);
+        ctx.fillStyle = ca + "55";
+        ctx.fill();
       }
     }
     requestAnimationFrame(frame);
@@ -1395,264 +1457,326 @@ function initStageParticles(){
   frame();
 }
 
-function buildSwatches(){
-  const bar=$("swatchBar"); if(!bar) return;
-  bar.innerHTML="";
+function buildSwatches() {
+  const bar = $("swatchBar"); if (!bar) return;
+  bar.innerHTML = "";
   THEMES.forEach((t, idx) => {
-    const sw=document.createElement("div");
-    sw.className="swatch";
-    sw.title=t.label;
-    sw.dataset.id=t.id;
-    sw.dataset.idx=idx;
-    sw.setAttribute("role","radio");
-    sw.setAttribute("aria-label",t.label);
-    sw.setAttribute("aria-checked","false");
-    sw.setAttribute("tabindex", idx === 0 ? "0" : "-1");
-    sw.innerHTML=`<div class="swatch-inner"><div class="swatch-half" style="background:${t.a}"></div><div class="swatch-half" style="background:${t.b}"></div></div>`;
-    sw.addEventListener("click",()=>{
-      const s=$("themeSelect"); if(s) s.value=t.id;
+    const sw = document.createElement("div");
+    sw.className = "swatch";
+    sw.title = t.label;
+    sw.dataset.id  = t.id;
+    sw.dataset.idx = idx;
+    sw.setAttribute("role",       "radio");
+    sw.setAttribute("aria-label", t.label);
+    sw.setAttribute("aria-checked", idx === 0 ? "true" : "false");
+    sw.setAttribute("tabindex",      idx === 0 ? "0"   : "-1");
+    sw.innerHTML = `<div class="swatch-inner"><div class="swatch-half" style="background:${t.a}"></div><div class="swatch-half" style="background:${t.b}"></div></div>`;
+    sw.addEventListener("click", () => {
+      const s = $("themeSelect"); if (s) s.value = t.id;
       updateLive(); updateActiveSwatch(t.id);
     });
     bar.appendChild(sw);
   });
+  /* keyboard nav */
   bar.addEventListener("keydown", e => {
     const swatches = [...bar.querySelectorAll("[role='radio']")];
     const focused  = bar.querySelector("[role='radio']:focus");
-    const idx      = focused ? parseInt(focused.dataset.idx) : 0;
+    const idx      = focused ? parseInt(focused.dataset.idx, 10) : 0;
     let next = idx;
     if (e.key==="ArrowRight"||e.key==="ArrowDown") { e.preventDefault(); next=(idx+1)%swatches.length; }
     if (e.key==="ArrowLeft" ||e.key==="ArrowUp")   { e.preventDefault(); next=(idx-1+swatches.length)%swatches.length; }
     if (e.key==="Enter"||e.key===" ")               { e.preventDefault(); focused?.click(); return; }
     if (next !== idx) {
-      swatches.forEach(s=>s.setAttribute("tabindex","-1"));
+      swatches.forEach(s => s.setAttribute("tabindex","-1"));
       swatches[next].setAttribute("tabindex","0");
       swatches[next].focus();
     }
   });
 }
-function updateActiveSwatch(id){
-  document.querySelectorAll(".swatch").forEach(s=>{
-    const active = s.dataset.id===id;
+
+function updateActiveSwatch(id) {
+  document.querySelectorAll(".swatch").forEach(s => {
+    const active = s.dataset.id === id;
     s.classList.toggle("active", active);
     s.setAttribute("aria-checked", active ? "true" : "false");
-    s.setAttribute("tabindex",     active ? "0" : "-1");
+    s.setAttribute("tabindex",     active ? "0"   : "-1");
   });
 }
-function buildThemeStrip(){
-  const strip=$("themeStrip"); if(!strip) return;
-  strip.innerHTML="";
-  for(const t of THEMES){
-    const m=document.createElement("div");
-    m.className="theme-mini";m.title=t.label;
-    m.style.background=`linear-gradient(90deg,${t.a},${t.b})`;
-    m.addEventListener("click",()=>{const s=$("themeSelect");if(s)s.value=t.id;updateLive();updateActiveSwatch(t.id);});
+
+function buildThemeStrip() {
+  const strip = $("themeStrip"); if (!strip) return;
+  strip.innerHTML = "";
+  for (const t of THEMES) {
+    const m = document.createElement("div");
+    m.className = "theme-mini"; m.title = t.label;
+    m.style.background = `linear-gradient(90deg,${t.a},${t.b})`;
+    m.addEventListener("click", () => {
+      const s = $("themeSelect"); if (s) s.value = t.id;
+      updateLive(); updateActiveSwatch(t.id);
+    });
     strip.appendChild(m);
   }
 }
-function updateCharCount(){const ta=$("msgInput"),cc=$("charCount");if(ta&&cc)cc.textContent=ta.value.length}
-function schedLive(){clearTimeout(liveDebounce);liveDebounce=setTimeout(updateLive,60)}
 
+function updateCharCount() {
+  const ta = $("msgInput"), cc = $("charCount");
+  if (ta && cc) cc.textContent = ta.value.length;
+}
+function schedLive() {
+  clearTimeout(liveDebounce);
+  liveDebounce = setTimeout(updateLive, 60);
+}
+
+/* FIX: live countdown — clear old interval properly, guard empty dateStr */
 let _liveCountdownTimer = null;
 function updateLiveCountdown(dateStr) {
-  const wrap = $("liveCountdown");
-  if (!wrap) return;
+  const wrap = $("liveCountdown"); if (!wrap) return;
   if (_liveCountdownTimer) { clearInterval(_liveCountdownTimer); _liveCountdownTimer = null; }
   if (!dateStr) { wrap.style.display = "none"; return; }
   function tick() {
-    const now = new Date();
-    const dob = new Date(dateStr);
+    const now = new Date(), dob = new Date(dateStr);
+    if (isNaN(dob.getTime())) { wrap.style.display="none"; return; }
     const isBday = now.getMonth()===dob.getMonth() && now.getDate()===dob.getDate();
+    const lbl = $("liveCountdownLabel");
     if (isBday) {
       wrap.style.display = "flex";
-      const lbl = $("liveCountdownLabel");
       if (lbl) lbl.textContent = "🎉 Today is the birthday!";
-      ["lcdD","lcdH","lcdM","lcdS"].forEach(id => { const e=$(id); if(e) e.textContent="🎂"; });
+      ["lcdD","lcdH","lcdM","lcdS"].forEach(id => { const e=$(id); if(e)e.textContent="🎂"; });
       return;
     }
     const next = new Date(dob); next.setFullYear(now.getFullYear());
-    if (next < now) next.setFullYear(now.getFullYear()+1);
+    if (next <= now) next.setFullYear(now.getFullYear()+1);
     const diff = next - now;
-    const d=Math.floor(diff/864e5),h=Math.floor((diff%864e5)/36e5),m=Math.floor((diff%36e5)/6e4),s=Math.floor((diff%6e4)/1e3);
+    const d=Math.floor(diff/864e5), h=Math.floor((diff%864e5)/36e5),
+          m=Math.floor((diff%36e5)/6e4), s=Math.floor((diff%6e4)/1e3);
     wrap.style.display = "flex";
-    const lbl = $("liveCountdownLabel"); if (lbl) lbl.textContent = d===0?"Birthday tomorrow! 🎂":`${d}d until birthday 🎂`;
-    const set=(id,v)=>{const e=$(id);if(e)e.textContent=String(v).padStart(2,"0");};
+    if (lbl) lbl.textContent = d===0 ? "Birthday tomorrow! 🎂" : `${d}d until birthday 🎂`;
+    const set=(id,v)=>{ const e=$(id); if(e)e.textContent=String(v).padStart(2,"0"); };
     set("lcdD",d); set("lcdH",h); set("lcdM",m); set("lcdS",s);
   }
   tick();
   _liveCountdownTimer = setInterval(tick, 1000);
 }
 
-function updateLive(){
-  const name=safeText($("nameInput")?.value||"Friend",32);
-  const msg=safeText($("msgInput")?.value||"Wishing you a day full of joy, laughter, and love. Happy Birthday! 🎉",220);
-  const themeId=$("themeSelect")?.value||"bronzenoir";
-  const fontId=$("fontSelect")?.value||"auto";
-  const effect=$("effectSelect")?.value||"auto";
-  const tmpl=$("templateSelect")?.value||"t1";
-  const date=$("dateInput")?.value||"";
-  setCSSVars(themeId);applyFont(fontId,themeId);applyEffect(effect);updateActiveSwatch(themeId);updateCharCount();
-  const ln=$("liveTitle");if(ln)ln.textContent=name;
-  const lm=$("liveMsg");if(lm)lm.textContent=msg;
-  const ae=$("liveAge");if(ae){const a=calcAge(date);if(a!==null){ae.textContent=`Turning ${ordinal(a+1)}`;ae.style.display="";}else ae.style.display="none";}
-  const st=$("liveStage");if(st)st.className="stage "+tmpl;
-  const ph=$("livePhoto"),fb=qs("#liveFrame .ph-fallback");
-  if(uploadedPhotoUrl&&ph){ph.src=uploadedPhotoUrl;ph.style.display="block";if(fb)fb.style.display="none";}
-  else if(ph){ph.removeAttribute("src");ph.style.display="none";if(fb)fb.style.display="block";}
+function updateLive() {
+  const name    = safeText($("nameInput")?.value||"Friend", 32);
+  const msg     = safeText($("msgInput")?.value||"Wishing you a day full of joy, laughter, and love. Happy Birthday! 🎉", 220);
+  const themeId = $("themeSelect")?.value    || "bronzenoir";
+  const fontId  = $("fontSelect")?.value     || "auto";
+  const effect  = $("effectSelect")?.value   || "auto";
+  const tmpl    = $("templateSelect")?.value || "t1";
+  const date    = $("dateInput")?.value      || "";
+  setCSSVars(themeId); applyFont(fontId,themeId); applyEffect(effect);
+  updateActiveSwatch(themeId); updateCharCount();
+  const ln = $("liveTitle"); if (ln) ln.textContent = name;
+  const lm = $("liveMsg");   if (lm) lm.textContent = msg;
+  const ae = $("liveAge");
+  if (ae) {
+    const a = calcAge(date);
+    if (a !== null) { ae.textContent = `Turning ${ordinal(a+1)}`; ae.style.display=""; }
+    else              ae.style.display="none";
+  }
+  const st = $("liveStage"); if (st) st.className = "stage " + tmpl;
+  const ph = $("livePhoto"), fb = document.querySelector("#liveFrame .ph-fallback");
+  if (uploadedPhotoUrl && ph) {
+    ph.src = uploadedPhotoUrl; ph.style.display = "block";
+    if (fb) fb.style.display = "none";
+  } else if (ph) {
+    ph.removeAttribute("src"); ph.style.display = "none";
+    if (fb) fb.style.display = "block";
+  }
   updateLiveCountdown(date);
   syncSheet();
 }
 
-async function uploadCloudinary(file){
-  const fd=new FormData();fd.append("file",file);fd.append("upload_preset",CLOUDINARY_PRESET);fd.append("folder","wishcraft");
-  const res=await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`,{method:"POST",body:fd});
-  if(!res.ok) throw new Error(await res.text().catch(()=>""));
+async function uploadCloudinary(file) {
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("upload_preset", CLOUDINARY_PRESET);
+  fd.append("folder","wishcraft");
+  const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`, { method:"POST", body:fd });
+  if (!res.ok) throw new Error(await res.text().catch(()=>"Upload failed"));
   return res.json();
 }
-async function handleFile(file){
-  if(!file?.type.startsWith("image/")){toast("Please select an image");return;}
-  if(file.size>4*1024*1024){toast("Please upload under 4 MB ⚠️");return;}
-  const se=$("uploadState"),pw=$("progressWrap"),pb=$("progressBar");
-  if(se)se.textContent="Uploading…";if(pw)pw.classList.add("show");
-  if(pb){pb.style.width="10%";setTimeout(()=>pb.style.width="60%",200);}
+
+async function handleFile(file) {
+  if (!file?.type.startsWith("image/")) { toast("Please select an image","error"); return; }
+  if (file.size > 4*1024*1024)          { toast("Please upload under 4 MB ⚠️","error"); return; }
+  const se=$("uploadState"), pw=$("progressWrap"), pb=$("progressBar");
+  if (se) se.textContent="Uploading…";
+  if (pw) pw.classList.add("show");
+  if (pb) { pb.style.width="10%"; setTimeout(()=>pb.style.width="60%",200); }
   setStatus("uploading","Uploading…");
-  try{
-    const data=await uploadCloudinary(file);
-    uploadedPhotoUrl=data.secure_url;
-    if(pb)pb.style.width="100%";
-    setTimeout(()=>{if(pw)pw.classList.remove("show");if(pb)pb.style.width="0%";},600);
-    const prev=$("photoPreview"),wrap=$("previewWrap"),zone=$("uploadZone");
-    if(prev){prev.src=uploadedPhotoUrl;prev.style.display="block";}
-    if(wrap)wrap.classList.add("visible");if(zone)zone.classList.add("has-photo");
-    if(se)se.textContent="✓ Uploaded";setStatus("","Ready");updateLive();toast("Photo uploaded ✅");
-  }catch(err){
-    console.error(err);if(pb)pb.style.width="0%";if(pw)pw.classList.remove("show");
-    if(se)se.textContent="Upload failed ✗";setStatus("error","Error");toast("Upload failed. Check Cloudinary preset.");
+  try {
+    const data = await uploadCloudinary(file);
+    uploadedPhotoUrl = data.secure_url;
+    if (pb) pb.style.width="100%";
+    setTimeout(()=>{ if(pw)pw.classList.remove("show"); if(pb)pb.style.width="0%"; }, 600);
+    const prev=$("photoPreview"), wrap=$("previewWrap"), zone=$("uploadZone");
+    if (prev) { prev.src=uploadedPhotoUrl; prev.style.display="block"; }
+    if (wrap) wrap.classList.add("visible");
+    if (zone) zone.classList.add("has-photo");
+    if (se) se.textContent="✓ Uploaded";
+    setStatus("","Ready"); updateLive(); toast("Photo uploaded ✅","success");
+  } catch(err) {
+    console.error(err);
+    if (pb) pb.style.width="0%"; if (pw) pw.classList.remove("show");
+    if (se) se.textContent="Upload failed ✗";
+    setStatus("error","Error"); toast("Upload failed. Check Cloudinary preset.","error");
   }
 }
 
 async function buildAndShowQR(shareUrl, themeId, style) {
   const theme = THEMES.find(t=>t.id===themeId)||THEMES[0];
-  const wrap  = $("qrWrap"); if(!wrap) return;
+  const wrap  = $("qrWrap"); if (!wrap) return;
   wrap.innerHTML = '<div class="qr-ph"><span class="spinner"></span></div>';
-  await new Promise(r => setTimeout(r, 20)); // let spinner render first
+  /* Yield to browser so spinner paints before heavy work */
+  await new Promise(r => setTimeout(r, 30));
   try {
-    const canvas = renderThemedQR(shareUrl, theme, style); // synchronous now
+    const canvas = renderThemedQR(shareUrl, theme, style);
     wrap.innerHTML = "";
     const wrapInner = document.createElement("div");
     wrapInner.id = "qrCanvas-wrap";
     wrapInner.style.cssText = `background:${isColorDark(theme.b)?theme.b:"#fff"};border-radius:12px;padding:14px`;
-    wrapInner.appendChild(canvas);
     canvas.style.cssText = "max-width:260px;width:100%;height:auto;display:block;border-radius:6px";
+    wrapInner.appendChild(canvas);
     wrap.appendChild(wrapInner);
-    lastQrBlob = await new Promise(res => canvas.toBlob(res, "image/png"));
-    [$("downloadQrBtn"),$("shareQrBtn"),$("copyQrBtn")].forEach(b=>{if(b)b.disabled=false;});
+    /* FIX: use Promise-based toBlob */
+    lastQrBlob = await new Promise((res, rej) => canvas.toBlob(b => b ? res(b) : rej(new Error("toBlob failed")), "image/png"));
+    [$("downloadQrBtn"),$("shareQrBtn"),$("copyQrBtn")].forEach(b => { if(b) b.disabled=false; });
   } catch(e) {
     console.error("QR render error:", e);
-    wrap.innerHTML = '<div class="qr-ph"><div class="qr-ph-icon">⚠️</div><div>QR failed — check connection</div></div>';
-    toast("QR failed");
+    wrap.innerHTML = '<div class="qr-ph"><div class="qr-ph-icon">⚠️</div><div>QR render failed</div></div>';
+    toast("QR render failed: " + e.message, "error");
   }
 }
 
-function confetti(durationMs=2800){
+/* FIX: confetti — get dimensions after layout using getBoundingClientRect */
+function confetti(durationMs=2800) {
   if (window.matchMedia?.("(prefers-reduced-motion:reduce)").matches) return;
-  const c=$("confetti"); if(!c) return;
-  const ctx=c.getContext("2d"); if(!ctx) return;
-  const dpr=Math.min(2,window.devicePixelRatio||1);
-  c.width=Math.floor(c.clientWidth*dpr);c.height=Math.floor(c.clientHeight*dpr);
-  const cols=["#FFD700","#FF6B6B","#4ECDC4","#45B7D1","#96CEB4","#FFEAA7","#DDA0DD","#98D8C8","#ff9ff3","#ffd32a"];
-  const ps=Array.from({length:220}).map(()=>({x:Math.random()*c.width,y:-Math.random()*c.height*.3,vx:(Math.random()-.5)*3*dpr,vy:(Math.random()*3+1.5)*dpr,r:(Math.random()*7+2)*dpr,a:Math.random()*Math.PI*2,va:(Math.random()-.5)*.22,g:(Math.random()*.07+.03)*dpr,color:cols[Math.floor(Math.random()*cols.length)],shape:Math.random()>.5?"rect":"circle"}));
-  const t0=performance.now();
-  const frame=t=>{
-    const el=t-t0,al=el>durationMs-700?Math.max(0,1-(el-(durationMs-700))/700):1;
+  const c = $("confetti"); if (!c) return;
+  const ctx = c.getContext("2d"); if (!ctx) return;
+  const dpr  = Math.min(2, window.devicePixelRatio||1);
+  const rect = c.parentElement.getBoundingClientRect();
+  /* FIX: use actual rendered size, not clientWidth (0 when hidden) */
+  const W = rect.width  || 600;
+  const H = rect.height || 600;
+  c.width  = Math.floor(W * dpr);
+  c.height = Math.floor(H * dpr);
+  c.style.width  = W + "px";
+  c.style.height = H + "px";
+  const cols = ["#FFD700","#FF6B6B","#4ECDC4","#45B7D1","#96CEB4","#FFEAA7","#DDA0DD","#98D8C8","#ff9ff3","#ffd32a"];
+  const ps = Array.from({length:220}).map(()=>({
+    x:     Math.random()*c.width,
+    y:    -Math.random()*c.height*.3,
+    vx:    (Math.random()-.5)*3*dpr,
+    vy:    (Math.random()*3+1.5)*dpr,
+    r:     (Math.random()*7+2)*dpr,
+    a:     Math.random()*Math.PI*2,
+    va:    (Math.random()-.5)*.22,
+    g:     (Math.random()*.07+.03)*dpr,
+    color: cols[Math.floor(Math.random()*cols.length)],
+    shape: Math.random()>.5?"rect":"circle"
+  }));
+  const t0 = performance.now();
+  const frame = t => {
+    const el = t - t0;
+    const al = el > durationMs-700 ? Math.max(0,1-(el-(durationMs-700))/700) : 1;
     ctx.clearRect(0,0,c.width,c.height);
-    for(const p of ps){p.x+=p.vx;p.y+=p.vy;p.vy+=p.g;p.a+=p.va;ctx.save();ctx.translate(p.x,p.y);ctx.rotate(p.a);ctx.globalAlpha=al;ctx.fillStyle=p.color;if(p.shape==="circle"){ctx.beginPath();ctx.arc(0,0,p.r,0,Math.PI*2);ctx.fill();}else ctx.fillRect(-p.r,-p.r/2,p.r*2,p.r);ctx.restore();}
-    if(el<durationMs)requestAnimationFrame(frame);else ctx.clearRect(0,0,c.width,c.height);
+    for (const p of ps) {
+      p.x+=p.vx; p.y+=p.vy; p.vy+=p.g; p.a+=p.va;
+      ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(p.a);
+      ctx.globalAlpha=al; ctx.fillStyle=p.color;
+      if (p.shape==="circle") { ctx.beginPath(); ctx.arc(0,0,p.r,0,Math.PI*2); ctx.fill(); }
+      else ctx.fillRect(-p.r,-p.r/2,p.r*2,p.r);
+      ctx.restore();
+    }
+    if (el < durationMs) requestAnimationFrame(frame);
+    else ctx.clearRect(0,0,c.width,c.height);
   };
   requestAnimationFrame(frame);
 }
-function startCountdown(dateStr){
-  const wrap=$("countdownWrap"); if(!wrap) return;
-  const label=$("countdownLabel");
 
-  /* Animate a value change with a flip */
+function startCountdown(dateStr) {
+  const wrap = $("countdownWrap"); if (!wrap) return;
+  const label = $("countdownLabel");
   function setVal(el, newVal) {
-    if (!el) return;
-    if (el.textContent === newVal) return;
+    if (!el || el.textContent === newVal) return;
     el.classList.add("flip");
-    setTimeout(() => {
-      el.textContent = newVal;
-      el.classList.remove("flip");
-    }, 120);
+    setTimeout(()=>{ el.textContent=newVal; el.classList.remove("flip"); }, 120);
   }
-
-  function tick(){
-    const now = new Date();
-    const dob = new Date(dateStr);
-    const nextBirthday = new Date(dob);
-    nextBirthday.setFullYear(now.getFullYear());
-    if (nextBirthday < now) nextBirthday.setFullYear(now.getFullYear()+1);
-
-    /* Check if today IS the birthday */
+  function tick() {
+    const now = new Date(), dob = new Date(dateStr);
+    if (isNaN(dob.getTime())) return;
+    const next = new Date(dob); next.setFullYear(now.getFullYear());
+    if (next < now) next.setFullYear(now.getFullYear()+1);
     const isBday = now.getMonth()===dob.getMonth() && now.getDate()===dob.getDate();
-    if (isBday) {
-      wrap.classList.add("visible","birthday-today");
-      return;
-    }
-
-    wrap.classList.add("visible");
-    wrap.classList.remove("birthday-today");
-
-    const diff = nextBirthday - now;
-    const d = Math.floor(diff/864e5);
-    const h = Math.floor((diff%864e5)/36e5);
-    const m = Math.floor((diff%36e5)/6e4);
-    const s = Math.floor((diff%6e4)/1e3);
-
-    if (label) label.textContent = d === 0 ? "Birthday is Tomorrow! 🎂" : d === 1 ? "1 day to go 🎂" : `${d} days until birthday 🎂`;
-
-    setVal($("cdD"), String(d).padStart(2,"0"));
-    setVal($("cdH"), String(h).padStart(2,"0"));
-    setVal($("cdM"), String(m).padStart(2,"0"));
-    setVal($("cdS"), String(s).padStart(2,"0"));
+    if (isBday) { wrap.classList.add("visible","birthday-today"); return; }
+    wrap.classList.add("visible"); wrap.classList.remove("birthday-today");
+    const diff = next - now;
+    const d=Math.floor(diff/864e5), h=Math.floor((diff%864e5)/36e5),
+          m=Math.floor((diff%36e5)/6e4), s=Math.floor((diff%6e4)/1e3);
+    if (label) label.textContent = d===0?"Birthday is Tomorrow! 🎂":d===1?"1 day to go 🎂":`${d} days until birthday 🎂`;
+    setVal($("cdD"),String(d).padStart(2,"0")); setVal($("cdH"),String(h).padStart(2,"0"));
+    setVal($("cdM"),String(m).padStart(2,"0")); setVal($("cdS"),String(s).padStart(2,"0"));
   }
   tick();
-  setInterval(tick,1000);
-}
-function floatEmoji(emoji,x,y){
-  const el=document.createElement("div");el.className="float-emoji";el.textContent=emoji;
-  el.style.cssText=`left:${x}px;top:${y}px`;document.body.appendChild(el);setTimeout(()=>el.remove(),950);
+  setInterval(tick, 1000);
 }
 
-function showBuilder(){$("builder")?.classList.remove("hidden");$("player")?.classList.add("hidden")}
-function showPlayer(){$("builder")?.classList.add("hidden");$("player")?.classList.remove("hidden")}
+function floatEmoji(emoji, x, y) {
+  const el = document.createElement("div");
+  el.className = "float-emoji"; el.textContent = emoji;
+  el.style.cssText = `left:${x}px;top:${y}px`;
+  document.body.appendChild(el);
+  setTimeout(()=>el.remove(), 950);
+}
 
-function renderPlayer(payload){
+function showBuilder() { $("builder")?.classList.remove("hidden"); $("player")?.classList.add("hidden"); }
+function showPlayer()  { $("builder")?.classList.add("hidden");    $("player")?.classList.remove("hidden"); }
+
+function renderPlayer(payload) {
+  /* FIX: proper expiry check — ts=0 means never */
   if (isExpired(payload.expiry)) {
     $("expiredScreen")?.classList.add("visible");
-    $("playerHero")?.style.setProperty("display","none");
-    qs(".player-photo")?.style.setProperty("display","none");
-    $("reactions")?.style.setProperty("display","none");
-    $("countdownWrap")?.style.setProperty("display","none");
-    qs(".player-cta")?.style.setProperty("display","none");
+    [$("playerHero"),document.querySelector(".player-photo"),$("reactions"),$("countdownWrap"),document.querySelector(".player-cta")]
+      .forEach(el=>{ if(el) el.style.display="none"; });
     document.title = "Wish Expired — WishCraft";
-    const themeId = payload.theme || "bronzenoir";
-    setCSSVars(themeId);
+    setCSSVars(payload.theme || "bronzenoir");
     return;
   }
-  const name=safeText(payload.name||"Friend",32);
-  const msg=safeText(payload.msg||"Wishing you a day full of joy, laughter, and love. Happy Birthday! 🎉",220);
-  const themeId=payload.theme||"bronzenoir";
-  setCSSVars(themeId);applyFont(payload.font||"auto",themeId);applyEffect(payload.effect||"auto");
-  const pn=$("pName");if(pn)pn.textContent=name;
-  const pm=$("pMsg");if(pm)pm.textContent=msg;
-  const pa=$("pAge");if(pa){const a=calcAge(payload.date||"");if(a!==null){pa.textContent=`Turning ${ordinal(a+1)} 🎂`;pa.style.display="";}else pa.style.display="none";}
-  const stage=$("playerStage");if(stage)stage.className=`player-stage ${payload.template||"t1"} anim-${payload.anim||"fade"}`;
-  const img=$("pPhoto"),fb=qs(".player-photo .ph-fallback"),pw=qs(".player-photo");
-  if(payload.photo&&img){img.src=payload.photo;img.style.display="block";if(fb)fb.style.display="none";if(pw)pw.style.display="";stage?.classList.remove("no-photo");}
-  else if(img){img.removeAttribute("src");img.style.display="none";if(fb)fb.style.display="block";if(pw)pw.style.display="none";stage?.classList.add("no-photo");}
-  if(payload.anim==="typewriter"&&pm){pm.classList.add("tw");setTimeout(()=>pm.classList.remove("tw"),4000);}
-  document.title=`Happy Birthday, ${name}! — WishCraft`;
-  if(payload.date)startCountdown(payload.date);
+
+  const name    = safeText(payload.name||"Friend", 32);
+  const msg     = safeText(payload.msg||"Wishing you a day full of joy, laughter, and love. Happy Birthday! 🎉", 220);
+  const themeId = payload.theme    || "bronzenoir";
+  setCSSVars(themeId); applyFont(payload.font||"auto",themeId); applyEffect(payload.effect||"auto");
+
+  const pn=$("pName"); if(pn) pn.textContent=name;
+  const pm=$("pMsg");  if(pm) pm.textContent=msg;
+  const pa=$("pAge");
+  if (pa) {
+    const a = calcAge(payload.date||"");
+    if (a !== null) { pa.textContent=`Turning ${ordinal(a+1)} 🎂`; pa.style.display=""; }
+    else pa.style.display="none";
+  }
+  const stage = $("playerStage");
+  if (stage) stage.className = `player-stage ${payload.template||"t1"} anim-${payload.anim||"fade"}`;
+
+  const img=$("pPhoto"), fb=document.querySelector(".player-photo .ph-fallback"), pw=document.querySelector(".player-photo");
+  if (payload.photo && img) {
+    img.src=payload.photo; img.style.display="block";
+    if(fb) fb.style.display="none"; if(pw) pw.style.display=""; stage?.classList.remove("no-photo");
+  } else if (img) {
+    img.removeAttribute("src"); img.style.display="none";
+    if(fb) fb.style.display="block"; if(pw) pw.style.display="none"; stage?.classList.add("no-photo");
+  }
+
+  if (payload.anim==="typewriter" && pm) {
+    pm.classList.add("tw"); setTimeout(()=>pm.classList.remove("tw"),4000);
+  }
+  document.title = `Happy Birthday, ${name}! — WishCraft`;
+  if (payload.date) startCountdown(payload.date);
+
   const notice = expiryNoticeText(payload.expiry);
   const noticeEl = $("expiryNotice");
   if (noticeEl && notice) {
@@ -1660,91 +1784,102 @@ function renderPlayer(payload){
     noticeEl.classList.add("visible");
     if (notice.critical) noticeEl.classList.add("critical");
   }
-  confetti(3000);
-  try{const stored=JSON.parse(localStorage.getItem("wc_rc_"+name)||"[0,0,0,0]");reactionCounts=stored;["rc0","rc1","rc2","rc3"].forEach((id,i)=>{const el=$(id);if(el)el.textContent=reactionCounts[i];});}catch{}
+
+  /* FIX: delay confetti so canvas has rendered dimensions */
+  setTimeout(()=>confetti(3000), 100);
+
+  try {
+    const stored = JSON.parse(localStorage.getItem("wc_rc_"+name)||"[0,0,0,0]");
+    reactionCounts = stored;
+    ["rc0","rc1","rc2","rc3"].forEach((id,i)=>{ const el=$(id); if(el)el.textContent=reactionCounts[i]; });
+  } catch {}
 }
 
-function fillSelect(el,items){
-  if(!el)return;el.innerHTML="";
-  for(const it of items){const o=document.createElement("option");o.value=it.id;o.textContent=it.name||it.label;el.appendChild(o);}
+function fillSelect(el, items) {
+  if (!el) return; el.innerHTML="";
+  for (const it of items) {
+    const o = document.createElement("option");
+    o.value=it.id; o.textContent=it.name||it.label;
+    el.appendChild(o);
+  }
 }
-function setupUpload(){
-  const zone=$("uploadZone"); if(!zone) return;
-  zone.addEventListener("click",e=>{if(e.target===$("removePhotoBtn"))return;$("photoInput")?.click();});
-  zone.addEventListener("dragover",e=>{e.preventDefault();zone.classList.add("dragover");});
-  zone.addEventListener("dragleave",()=>zone.classList.remove("dragover"));
-  zone.addEventListener("drop",async e=>{e.preventDefault();zone.classList.remove("dragover");const f=e.dataTransfer?.files?.[0];if(f)await handleFile(f);});
-  $("photoInput")?.addEventListener("change",async e=>{const f=e.target.files?.[0];if(f)await handleFile(f);e.target.value="";});
+
+function setupUpload() {
+  const zone = $("uploadZone"); if (!zone) return;
+  zone.addEventListener("click", e => { if(e.target===$("removePhotoBtn"))return; $("photoInput")?.click(); });
+  zone.addEventListener("dragover", e => { e.preventDefault(); zone.classList.add("dragover"); });
+  zone.addEventListener("dragleave", ()=>zone.classList.remove("dragover"));
+  zone.addEventListener("drop", async e => { e.preventDefault(); zone.classList.remove("dragover"); const f=e.dataTransfer?.files?.[0]; if(f)await handleFile(f); });
+  $("photoInput")?.addEventListener("change", async e => { const f=e.target.files?.[0]; if(f)await handleFile(f); e.target.value=""; });
 }
 
 function wireQrStyleBtns() {
   document.querySelectorAll(".qr-style-btn").forEach(btn => {
     btn.addEventListener("click", async () => {
-      document.querySelectorAll(".qr-style-btn").forEach(b=>{
-        b.classList.remove("active");
-        b.setAttribute("aria-pressed","false");
+      document.querySelectorAll(".qr-style-btn").forEach(b => {
+        b.classList.remove("active"); b.setAttribute("aria-pressed","false");
       });
-      btn.classList.add("active");
-      btn.setAttribute("aria-pressed","true");
+      btn.classList.add("active"); btn.setAttribute("aria-pressed","true");
       currentQrStyle = btn.dataset.style;
       if (lastShareUrl && lastPayload) {
-        const themeId = lastPayload.theme || "bronzenoir";
-        await buildAndShowQR(lastShareUrl, themeId, currentQrStyle);
+        await buildAndShowQR(lastShareUrl, lastPayload.theme||"bronzenoir", currentQrStyle);
       }
     });
   });
 }
 
-function wireEvents(){
+function wireEvents() {
   ["nameInput","msgInput","themeSelect","templateSelect","fontSelect","effectSelect","animSelect","dateInput"]
-    .forEach(id=>{$(id)?.addEventListener("input",schedLive);$(id)?.addEventListener("change",schedLive);});
+    .forEach(id=>{ $(id)?.addEventListener("input",schedLive); $(id)?.addEventListener("change",schedLive); });
 
-  document.querySelectorAll(".tmpl-pill").forEach(btn => {
-    btn.addEventListener("click", () => {
-      const text = MSG_PRESETS[btn.dataset.preset];
-      if (!text) return;
+  document.querySelectorAll(".tmpl-pill").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      const text = MSG_PRESETS[btn.dataset.preset]; if (!text) return;
       const ta = $("msgInput"); if (!ta) return;
       ta.value = text; schedLive();
-      toast(`Template applied ✨`, "info");
+      toast("Template applied ✨","info");
     });
   });
 
-  $("previewFab")?.addEventListener("click", openSheet);
-  $("sheetClose")?.addEventListener("click", closeSheet);
-  $("sheetBackdrop")?.addEventListener("click", closeSheet);
-  $("sheetHandle")?.addEventListener("click", closeSheet);
+  $("previewFab")?.addEventListener("click",  openSheet);
+  $("sheetClose")?.addEventListener("click",  closeSheet);
+  $("sheetBackdrop")?.addEventListener("click",closeSheet);
+  $("sheetHandle")?.addEventListener("click",  closeSheet);
 
-  $("resetBtn")?.addEventListener("click",()=>{
+  $("resetBtn")?.addEventListener("click", ()=>{
     const defs={nameInput:"",msgInput:"Wishing you a day full of joy, laughter, and love. Happy Birthday! 🎉",themeSelect:"bronzenoir",templateSelect:"t1",fontSelect:"auto",effectSelect:"auto",animSelect:"fade",dateInput:"",expirySelect:"0"};
-    Object.entries(defs).forEach(([id,v])=>{const e=$(id);if(e)e.value=v;});
-    uploadedPhotoUrl="";lastShareUrl="";lastQrBlob=null;lastPayload=null;
+    Object.entries(defs).forEach(([id,v])=>{ const e=$(id); if(e)e.value=v; });
+    uploadedPhotoUrl=""; lastShareUrl=""; lastQrBlob=null; lastPayload=null;
     const prev=$("photoPreview"),wrap=$("previewWrap"),zone=$("uploadZone");
     if(prev){prev.removeAttribute("src");prev.style.display="none";}
-    if(wrap)wrap.classList.remove("visible");if(zone)zone.classList.remove("has-photo");
-    $("uploadState")&&($("uploadState").textContent="No photo selected");
-    $("shareLink")&&($("shareLink").value="");
-    $("shareCard")&&($("shareCard").style.display="none");
-    $("openLinkBtn")&&($("openLinkBtn").style.display="none");
+    if(wrap)wrap.classList.remove("visible"); if(zone)zone.classList.remove("has-photo");
+    const us=$("uploadState"); if(us)us.textContent="No photo selected";
+    const sl=$("shareLink"); if(sl)sl.value="";
+    const sc=$("shareCard"); if(sc)sc.style.display="none";
+    const ob=$("openLinkBtn"); if(ob)ob.style.display="none";
     $("linkPreview")?.classList.remove("visible");
-    $("qrWrap")&&($("qrWrap").innerHTML='<div class="qr-ph"><div class="qr-ph-icon">⬛</div><div>QR appears after generating</div></div>');
+    const qw=$("qrWrap");
+    if(qw)qw.innerHTML='<div class="qr-ph"><div class="qr-ph-icon">⬛</div><div>QR appears after generating</div></div>';
     [$("downloadQrBtn"),$("shareQrBtn"),$("copyQrBtn")].forEach(b=>{if(b)b.disabled=true;});
-    document.querySelectorAll(".qr-style-btn").forEach((b,i)=>{b.classList.toggle("active",i===0);b.setAttribute("aria-pressed",i===0?"true":"false");});
+    document.querySelectorAll(".qr-style-btn").forEach((b,i)=>{
+      b.classList.toggle("active",i===0); b.setAttribute("aria-pressed",i===0?"true":"false");
+    });
     currentQrStyle="square";
     updateLive(); toast("Reset ✓","info");
   });
 
-  $("removePhotoBtn")?.addEventListener("click",e=>{
-    e.stopPropagation();uploadedPhotoUrl="";
+  $("removePhotoBtn")?.addEventListener("click", e=>{
+    e.stopPropagation(); uploadedPhotoUrl="";
     const prev=$("photoPreview"),wrap=$("previewWrap"),zone=$("uploadZone");
     if(prev){prev.removeAttribute("src");prev.style.display="none";}
-    if(wrap)wrap.classList.remove("visible");if(zone)zone.classList.remove("has-photo");
-    $("uploadState")&&($("uploadState").textContent="No photo selected");
+    if(wrap)wrap.classList.remove("visible"); if(zone)zone.classList.remove("has-photo");
+    const us=$("uploadState"); if(us)us.textContent="No photo selected";
     updateLive(); toast("Photo removed","info");
   });
 
-  $("copyBtn")?.addEventListener("click",async()=>{
+  $("copyBtn")?.addEventListener("click", async ()=>{
     const v=($("shareLink")?.value||"").trim();
-    if(!v)return toast("Generate a link first","error");
+    if(!v){toast("Generate a link first","error");return;}
     try {
       await navigator.clipboard.writeText(v);
       triggerCopyMorph($("copyBtn"));
@@ -1754,94 +1889,116 @@ function wireEvents(){
     }
   });
 
-  $("generateBtn")?.addEventListener("click",async()=>{
+  $("generateBtn")?.addEventListener("click", async ()=>{
     const btn=$("generateBtn");
     if(btn){btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Generating…';}
-
-    const name    = safeText($("nameInput")?.value||"Friend",32);
-    const msg     = safeText($("msgInput")?.value||"Wishing you a day full of joy, laughter, and love. Happy Birthday! 🎉",220);
-    const themeId = $("themeSelect")?.value    || "bronzenoir";
-    const tmpl    = $("templateSelect")?.value || "t1";
-    const fontId  = $("fontSelect")?.value     || "auto";
-    const effect  = $("effectSelect")?.value   || "auto";
-    const anim    = $("animSelect")?.value     || "fade";
-    const date    = $("dateInput")?.value      || "";
-    const expiryDays = parseInt($("expirySelect")?.value || "0", 10);
-    const expiryTs   = computeExpiryTs(expiryDays);
-
-    const payload = {name,msg,theme:themeId,template:tmpl,font:fontId,effect,anim,photo:uploadedPhotoUrl||"",date,expiry:expiryTs};
-    lastPayload   = payload;
-
-    const encoded  = encodePayload(payload);
-    const hash     = "#w=" + encoded;
-    const shareUrl = location.origin + location.pathname + hash;
-    lastShareUrl   = shareUrl;
-
+    const name      = safeText($("nameInput")?.value||"Friend",32);
+    const msg       = safeText($("msgInput")?.value||"Wishing you a day full of joy, laughter, and love. Happy Birthday! 🎉",220);
+    const themeId   = $("themeSelect")?.value    || "bronzenoir";
+    const tmpl      = $("templateSelect")?.value || "t1";
+    const fontId    = $("fontSelect")?.value     || "auto";
+    const effect    = $("effectSelect")?.value   || "auto";
+    const anim      = $("animSelect")?.value     || "fade";
+    const date      = $("dateInput")?.value      || "";
+    const expiryDays= parseInt($("expirySelect")?.value||"0",10);
+    const expiryTs  = computeExpiryTs(expiryDays);
+    const payload   = {name,msg,theme:themeId,template:tmpl,font:fontId,effect,anim,photo:uploadedPhotoUrl||"",date,expiry:expiryTs};
+    lastPayload     = payload;
+    let encoded, shareUrl;
+    try {
+      encoded  = encodePayload(payload);
+      shareUrl = location.origin + location.pathname + "#w=" + encoded;
+    } catch(e) {
+      console.error("Encode failed:",e);
+      toast("Failed to encode payload: "+e.message,"error");
+      if(btn){btn.disabled=false;btn.textContent="Generate Link + QR";}
+      return;
+    }
+    lastShareUrl = shareUrl;
     const sl=$("shareLink"); if(sl)sl.value=shareUrl;
     const ob=$("openLinkBtn"); if(ob){ob.href=shareUrl;ob.style.display="";}
     const sc=$("shareCard"); if(sc)sc.style.display="";
-
     updateUrlMeter(shareUrl);
     const theme = THEMES.find(t=>t.id===themeId)||THEMES[0];
     updateLinkPreview(payload, shareUrl, theme);
-
     await buildAndShowQR(shareUrl, themeId, currentQrStyle);
     toast("Link + QR ready 🎉","success");
-
-    if(btn){btn.disabled=false;btn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> Regenerate';}
+    if(btn){
+      btn.disabled=false;
+      btn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> Regenerate';
+    }
   });
 
   $("downloadQrBtn")?.addEventListener("click",()=>{
-    if(!lastQrBlob)return toast("Generate QR first","error");
+    if(!lastQrBlob){toast("Generate QR first","error");return;}
     const url=URL.createObjectURL(lastQrBlob),a=document.createElement("a");
     a.href=url;a.download="wishcraft-qr.png";document.body.appendChild(a);a.click();a.remove();
     setTimeout(()=>URL.revokeObjectURL(url),3000);
     toast("Downloading QR ⬇","info");
   });
+
   $("shareQrBtn")?.addEventListener("click",async()=>{
-    if(!lastQrBlob)return toast("Generate QR first","error");
-    if(!navigator.share)return toast("Not supported — use Download","info");
-    try{const f=new File([lastQrBlob],"wishcraft-qr.png",{type:"image/png"});await navigator.share({title:"WishCraft QR",text:"Scan to open.",files:[f],url:lastShareUrl||undefined});toast("Shared ✅","success");}catch{toast("Share cancelled","info");}
+    if(!lastQrBlob){toast("Generate QR first","error");return;}
+    if(!navigator.share){toast("Not supported — use Download","info");return;}
+    try {
+      const f=new File([lastQrBlob],"wishcraft-qr.png",{type:"image/png"});
+      await navigator.share({title:"WishCraft QR",text:"Scan to open.",files:[f],url:lastShareUrl||undefined});
+      toast("Shared ✅","success");
+    } catch { toast("Share cancelled","info"); }
   });
+
   $("copyQrBtn")?.addEventListener("click",async()=>{
-    if(!lastQrBlob)return toast("Generate QR first","error");
-    try{if(navigator.clipboard?.write){await navigator.clipboard.write([new ClipboardItem({"image/png":lastQrBlob})]);toast("QR image copied ✅","success");}else toast("Copy not supported — use Download","info");}catch{toast("Copy failed — use Download","error");}
+    if(!lastQrBlob){toast("Generate QR first","error");return;}
+    try {
+      if(navigator.clipboard?.write){
+        await navigator.clipboard.write([new ClipboardItem({"image/png":lastQrBlob})]);
+        toast("QR image copied ✅","success");
+      } else toast("Copy not supported — use Download","info");
+    } catch { toast("Copy failed — use Download","error"); }
   });
 
   $("replayBtn")?.addEventListener("click",()=>{
     confetti(2800);
-    const hero=$("playerHero");if(hero){hero.classList.remove("replay-pulse");void hero.offsetWidth;hero.classList.add("replay-pulse");}
+    const hero=$("playerHero");
+    if(hero){hero.classList.remove("replay-pulse");void hero.offsetWidth;hero.classList.add("replay-pulse");}
     toast("🎉 Happy Birthday!","success");
   });
+
   $("fullscreenBtn")?.addEventListener("click",async()=>{
-    const el=$("playerStage");
-    if(!document.fullscreenElement){await el?.requestFullscreen().catch(()=>{});$("fullscreenBtn").textContent="✕";}
-    else{document.exitFullscreen();$("fullscreenBtn").textContent="⛶";}
+    const el=$("playerStage"),btn=$("fullscreenBtn");
+    if(!document.fullscreenElement){
+      await el?.requestFullscreen().catch(()=>{});
+      if(btn)btn.textContent="✕";
+    } else {
+      document.exitFullscreen();
+      if(btn)btn.textContent="⛶";
+    }
   });
+
   document.querySelectorAll(".reaction-btn").forEach((btn,i)=>{
     btn.addEventListener("click",e=>{
       reactionCounts[i]++;
       const rc=$("rc"+i);if(rc)rc.textContent=reactionCounts[i];
-      const rect=btn.getBoundingClientRect();floatEmoji(btn.dataset.emoji,rect.left+rect.width/2,rect.top);
+      const rect=btn.getBoundingClientRect();
+      floatEmoji(btn.dataset.emoji,rect.left+rect.width/2,rect.top);
       try{localStorage.setItem("wc_rc_"+($("pName")?.textContent||"?"),JSON.stringify(reactionCounts));}catch{}
     });
   });
+
   window.addEventListener("hashchange",()=>location.reload());
 }
 
-function boot(){
+function boot() {
   initStars();
-  fillSelect($("themeSelect"),THEMES);
+  fillSelect($("themeSelect"),  THEMES);
   fillSelect($("templateSelect"),TEMPLATES);
-  fillSelect($("fontSelect"),FONTS);
-  $("themeSelect")&&($("themeSelect").value="bronzenoir");
-  $("templateSelect")&&($("templateSelect").value="t1");
-  $("fontSelect")&&($("fontSelect").value="auto");
-  $("effectSelect")&&($("effectSelect").value="auto");
-  $("animSelect")&&($("animSelect").value="fade");
-  buildSwatches();buildThemeStrip();setupUpload();wireQrStyleBtns();wireEvents();
-  initSheetSwipe();
+  fillSelect($("fontSelect"),   FONTS);
+  /* Set defaults */
+  const defaults={themeSelect:"bronzenoir",templateSelect:"t1",fontSelect:"auto",effectSelect:"auto",animSelect:"fade"};
+  Object.entries(defaults).forEach(([id,v])=>{ const e=$(id); if(e)e.value=v; });
+  buildSwatches(); buildThemeStrip(); setupUpload(); wireQrStyleBtns(); wireEvents(); initSheetSwipe();
 
+  /* Route: player vs builder */
   const hashNew    = location.hash.match(/#w=([^&]+)/);
   const hashLegacy = location.hash.match(/wish=([^&]+)/);
 
@@ -1849,16 +2006,16 @@ function boot(){
     try {
       const payload = decodePayload(decodeURIComponent(hashNew[1]));
       showPlayer(); renderPlayer(payload); return;
-    } catch(e) { console.error("Bad payload (new)", e); }
+    } catch(e) { console.error("Bad payload (new format):", e); toast("Could not load wish — link may be broken","error"); }
   }
   if (hashLegacy) {
     try {
       const payload = legacyDecode(decodeURIComponent(hashLegacy[1]));
       if (payload) { showPlayer(); renderPlayer(payload); return; }
-    } catch(e) { console.error("Bad payload (legacy)", e); }
+    } catch(e) { console.error("Bad payload (legacy):", e); }
   }
 
-  showBuilder();updateLive();initStageParticles();
+  showBuilder(); updateLive(); initStageParticles();
 }
 
 boot();
