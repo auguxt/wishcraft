@@ -716,22 +716,12 @@ select.inp option{color:#111;background:#fff}
 
 /* ==========================================================
    CLOUDINARY CONFIGURATION
-   - CLOUDINARY_CLOUD: your Cloudinary cloud name
-   - CLOUDINARY_PRESET: unsigned upload preset name
    ========================================================== */
 const CLOUDINARY_CLOUD  = "danzponmi";
 const CLOUDINARY_PRESET = "wishcraft";
 
 /* ==========================================================
    MODULE-LEVEL STATE
-   - uploadedPhotoUrl : Cloudinary URL after a successful upload
-   - lastQrCanvas     : most recently rendered QR canvas element
-   - lastQrBlob       : PNG blob of the last QR (for download/share)
-   - lastShareUrl     : the full generated share URL
-   - liveDebounce     : timer ID for debouncing live preview updates
-   - reactionCounts   : per-emoji tap counters on the player page
-   - currentQrStyle   : active QR dot style (square/round/dots/logo)
-   - lastPayload      : decoded payload object from the last generation
    ========================================================== */
 let uploadedPhotoUrl = "";
 let lastQrCanvas     = null;
@@ -744,18 +734,7 @@ let lastPayload      = null;
 
 /* ==========================================================
    LZ-BASED PAYLOAD COMPRESSION
-   Purpose: Shrink the JSON payload so it fits comfortably in
-   a URL hash fragment without needing a server.
-
-   Flow:
-     encodePayload(obj)  →  "z<base64url>" (LZ) or "p<base64url>" (plain)
-     decodePayload(str)  →  expanded payload object
-
-   lzCompress / lzDecompress: LZW-style dictionary compression
-   packCodes / unpackCodes  : pack 16-bit codes into a Uint8Array
-   b64u / b64uDec           : URL-safe base64 encode/decode
    ========================================================== */
-
 function lzCompress(str) {
   if (!str || str.length === 0) return [];
   const dict = {};
@@ -774,7 +753,6 @@ function lzCompress(str) {
       phrase = currChar;
     }
   }
-  /* FIX: always push the last remaining phrase */
   if (phrase.length > 0) {
     out.push(phrase.length > 1 ? (dict[phrase] != null ? dict[phrase] : phrase.charCodeAt(0)) : phrase.charCodeAt(0));
   }
@@ -794,7 +772,6 @@ function lzDecompress(compressed) {
     if (currCode < 256) {
       phrase = String.fromCharCode(currCode);
     } else {
-      /* FIX: guard against undefined dict entry during decompression */
       phrase = dict[currCode] !== undefined ? dict[currCode] : (oldPhrase + currChar);
     }
     out.push(phrase);
@@ -806,7 +783,6 @@ function lzDecompress(compressed) {
   return out.join("");
 }
 
-/* Pack an array of 16-bit codes into a byte array (big-endian) */
 function packCodes(codes) {
   const buf = new Uint8Array(codes.length * 2);
   for (let i = 0; i < codes.length; i++) {
@@ -815,7 +791,6 @@ function packCodes(codes) {
   }
   return buf;
 }
-/* Unpack a byte array back into 16-bit codes */
 function unpackCodes(buf) {
   const codes = [];
   for (let i = 0; i < buf.length; i += 2) {
@@ -823,14 +798,11 @@ function unpackCodes(buf) {
   }
   return codes;
 }
-
-/* URL-safe base64 encode (no padding) */
 function b64u(bytes) {
   let b = "";
   for (let i = 0; i < bytes.length; i++) b += String.fromCharCode(bytes[i]);
   return btoa(b).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
 }
-/* URL-safe base64 decode */
 function b64uDec(s) {
   const b64  = s.replace(/-/g,"+").replace(/_/g,"/");
   const bin  = atob(b64);
@@ -841,11 +813,6 @@ function b64uDec(s) {
 
 /* ==========================================================
    PAYLOAD KEY MAPPING & SLIM/EXPAND
-   - DEFAULTS: values that can be omitted from the payload to
-     keep URLs short (they will be re-applied on decode)
-   - KEY_MAP / KEY_UNMAP: shorten property names (e.g. name→n)
-   - slimPayload: strip defaults before encoding
-   - expandPayload: restore defaults after decoding
    ========================================================== */
 const DEFAULTS = { theme:"bronzenoir", template:"t1", font:"auto", effect:"auto", anim:"fade" };
 const KEY_MAP  = { name:"n", msg:"m", theme:"t", template:"l", font:"f", effect:"e", anim:"a", photo:"p", date:"d", expiry:"x" };
@@ -856,8 +823,6 @@ function slimPayload(p) {
   for (const [k,v] of Object.entries(p)) {
     if (k === "v") continue;
     if (v === "" || v == null) continue;
-    /* Skip default values to minimise URL length,
-       but never skip expiry:0 — 0 has semantic meaning (never expires) */
     if (k !== "expiry" && DEFAULTS[k] === v) continue;
     if (k === "expiry" && (v === 0 || v === "0")) continue;
     const sk = KEY_MAP[k] || k;
@@ -872,18 +837,15 @@ function expandPayload(s) {
     const k = KEY_UNMAP[sk] || sk;
     p[k] = v;
   }
-  /* Re-apply any defaults that were omitted */
   for (const [k,v] of Object.entries(DEFAULTS)) { if (p[k] == null) p[k] = v; }
   if (!p.name)  p.name  = "Friend";
   if (!p.msg)   p.msg   = "Wishing you a day full of joy, laughter, and love. Happy Birthday! 🎉";
   if (!p.photo) p.photo = "";
   if (!p.date)  p.date  = "";
-  /* FIX: expiry absent → 0 (no expiry); always parse as a number */
   p.expiry = p.expiry != null ? Number(p.expiry) : 0;
   return p;
 }
 
-/* Encode a payload object → URL-safe string */
 function encodePayload(payload) {
   const slim = slimPayload(payload);
   const json = JSON.stringify(slim);
@@ -892,7 +854,6 @@ function encodePayload(payload) {
     const packed = packCodes(codes);
     const lzResult = "z" + b64u(packed);
     const plain    = "p" + b64u(new TextEncoder().encode(json));
-    /* Use whichever is shorter */
     return lzResult.length < plain.length ? lzResult : plain;
   } catch(e) {
     console.warn("LZ compress failed, falling back to plain encoding:", e);
@@ -900,26 +861,22 @@ function encodePayload(payload) {
   }
 }
 
-/* Decode a URL-safe string → payload object */
 function decodePayload(encoded) {
   if (!encoded) throw new Error("Empty payload");
   const type = encoded[0];
   const data = encoded.slice(1);
   let json;
   if (type === "z") {
-    /* LZ-compressed path */
     const bytes = b64uDec(data);
     const codes = unpackCodes(bytes);
     json = lzDecompress(codes);
   } else {
-    /* Plain base64url — legacy links and fallback */
     const bytes = b64uDec(data);
     json = new TextDecoder().decode(bytes);
   }
   return expandPayload(JSON.parse(json));
 }
 
-/* Decode old-format (pre-compression) base64 links */
 function legacyDecode(b64) {
   try {
     const bin   = atob(b64.replace(/-/g,"+").replace(/_/g,"/"));
@@ -934,9 +891,6 @@ function legacyDecode(b64) {
 
 /* ==========================================================
    THEME & FONT DATA
-   - THEMES: colour pairs (accent colour + background colour)
-   - FONTS:  font stack options for the wish page
-   - TEMPLATES: layout variants for the birthday player stage
    ========================================================== */
 const THEMES = [
   { id:"bronzenoir",     label:"Bronze Noir",      a:"#b38f6f", b:"#161616" },
@@ -983,20 +937,10 @@ const TEMPLATES = [
 
 /* ==========================================================
    COLOUR UTILITY FUNCTIONS
-   - hexToRgb      : convert a hex colour string to {r,g,b}
-   - srgbLinear    : linearise a single sRGB channel (0–255 → 0–1)
-   - luminance     : WCAG relative luminance of a hex colour
-   - isColorDark   : true if a colour is perceptually dark
-   - contrastRatio : WCAG contrast ratio between two hex colours
-   - getQrPalette  : pick a high-contrast fg/bg pair for QR rendering
    ========================================================== */
 function hexToRgb(hex) {
   const h = hex.replace("#","");
-  return {
-    r: parseInt(h.slice(0,2),16),
-    g: parseInt(h.slice(2,4),16),
-    b: parseInt(h.slice(4,6),16)
-  };
+  return { r:parseInt(h.slice(0,2),16), g:parseInt(h.slice(2,4),16), b:parseInt(h.slice(4,6),16) };
 }
 function srgbLinear(v) {
   v /= 255;
@@ -1012,28 +956,17 @@ function contrastRatio(h1, h2) {
   return (Math.max(l1,l2) + 0.05) / (Math.min(l1,l2) + 0.05);
 }
 function getQrPalette(theme) {
-  /* Pick the darker of the two theme colours as fg, lighter as bg */
   const lA = luminance(theme.a), lB = luminance(theme.b);
   const [dark, light] = lB <= lA ? [theme.b, theme.a] : [theme.a, theme.b];
   if (contrastRatio(dark, light) >= 4) return { fg: dark, bg: light };
   if (contrastRatio("#000000", light) >= 4) return { fg: "#000000", bg: light };
   if (contrastRatio(dark, "#ffffff") >= 4) return { fg: dark, bg: "#ffffff" };
-  /* Ultimate fallback: guaranteed readable */
   return { fg: "#111111", bg: "#ffffff" };
 }
 
 /* ==========================================================
    QR CODE RENDERER
-   Purpose: generate a fully themed QR code canvas without
-   relying on qrcode.js internals.
-
-   - rrect       : draw a rounded-rectangle path on a canvas context
-   - getQRMatrix : use qrcode.js to render a QR, then extract the
-                   boolean module grid from the DOM table or canvas pixels
-   - renderThemedQR : paint a styled QR canvas using the boolean matrix
    ========================================================== */
-
-/* Helper: add a rounded rectangle path to a canvas 2D context */
 function rrect(ctx, x, y, w, h, r) {
   r = Math.min(r, w/2, h/2);
   ctx.moveTo(x+r, y);
@@ -1044,27 +977,12 @@ function rrect(ctx, x, y, w, h, r) {
   ctx.closePath();
 }
 
-/*
-  FIX: getQRMatrix avoids accessing qrcode.js private internals.
-  Strategy:
-    1. Let qrcode.js render into a hidden off-screen div
-    2. Read the boolean matrix from the rendered <table> (most reliable)
-    3. Fall back to pixel-sampling the rendered <canvas> if no table exists
-*/
 function getQRMatrix(url, ecLevel) {
-  /* Create a completely hidden container to render into */
   const container = document.createElement("div");
   container.style.cssText = "position:absolute;left:-99999px;top:-99999px;visibility:hidden;pointer-events:none;width:1px;height:1px;overflow:hidden";
   document.body.appendChild(container);
   try {
-    new QRCode(container, {
-      text: url,
-      width: 256,
-      height: 256,
-      correctLevel: ecLevel
-    });
-
-    /* ── Strategy A: extract from the <table> qrcode.js renders ── */
+    new QRCode(container, { text: url, width: 256, height: 256, correctLevel: ecLevel });
     const table = container.querySelector("table");
     if (table) {
       const rows = table.querySelectorAll("tr");
@@ -1073,7 +991,6 @@ function getQRMatrix(url, ecLevel) {
         const cells = row.querySelectorAll("td");
         const rowData = [];
         cells.forEach(cell => {
-          /* A dark cell (non-white background) = QR module ON */
           rowData.push(
             cell.style.backgroundColor !== "" &&
             cell.style.backgroundColor !== "rgb(255, 255, 255)" &&
@@ -1084,79 +1001,58 @@ function getQRMatrix(url, ecLevel) {
       });
       if (matrix.length > 0) return matrix;
     }
-
-    /* ── Strategy B: pixel-sample the rendered <canvas> ── */
     const qrCanvas = container.querySelector("canvas");
     if (qrCanvas) {
       const size = qrCanvas.width;
       const ctx  = qrCanvas.getContext("2d");
       const imgData = ctx.getImageData(0, 0, size, size);
-
-      /* Estimate the per-module pixel size by scanning for a likely value */
       let moduleSize = 0;
       for (let ms = 2; ms <= 20; ms++) {
-        if (size % ms === 0 || Math.abs(size - Math.round(size/ms)*ms) < ms) {
-          moduleSize = ms; break;
-        }
+        if (size % ms === 0 || Math.abs(size - Math.round(size/ms)*ms) < ms) { moduleSize = ms; break; }
       }
       if (moduleSize < 2) moduleSize = Math.round(size / 25);
-
       const N = Math.round(size / moduleSize);
       const matrix = [];
       for (let r = 0; r < N; r++) {
         const row = [];
         for (let c = 0; c < N; c++) {
-          /* Sample the centre pixel of each module cell */
           const px  = Math.floor((r + 0.5) * moduleSize);
           const py  = Math.floor((c + 0.5) * moduleSize);
           const idx = (px * size + py) * 4;
           const brightness = imgData.data[idx] + imgData.data[idx+1] + imgData.data[idx+2];
-          row.push(brightness < 380); /* dark = module ON */
+          row.push(brightness < 380);
         }
         matrix.push(row);
       }
       return matrix;
     }
   } finally {
-    /* Always remove the off-screen container to avoid DOM leaks */
     container.remove();
   }
   throw new Error("Could not extract QR matrix");
 }
 
-/* Paint a themed QR code canvas from a URL and theme object */
 function renderThemedQR(url, theme, style) {
-  /* Use high error-correction for logo style (more modules hidden by logo) */
   const ecLevel = (style === "logo") ? QRCode.CorrectLevel.H : QRCode.CorrectLevel.M;
   const matrix  = getQRMatrix(url, ecLevel);
   const N = matrix.length;
   if (N < 10) throw new Error("QR matrix too small: " + N);
-
-  const QUIET    = 4;           /* quiet zone in modules */
-  const SIZE     = 512;         /* canvas size in px */
+  const QUIET    = 4;
+  const SIZE     = 512;
   const cellSize = SIZE / (N + QUIET * 2);
   const margin   = QUIET * cellSize;
-
   const { fg: fgHex, bg: bgHex } = getQrPalette(theme);
   const fgRgb = hexToRgb(fgHex);
-
-  /* Create the output canvas */
   const canvas = document.createElement("canvas");
   canvas.width = canvas.height = SIZE;
   const ctx = canvas.getContext("2d");
-
-  /* Fill solid background */
   ctx.fillStyle = bgHex;
   ctx.fillRect(0, 0, SIZE, SIZE);
-
-  /* Subtle radial tint using the foreground colour */
   const tint = ctx.createRadialGradient(SIZE/2, SIZE/2, 0, SIZE/2, SIZE/2, SIZE * 0.72);
   tint.addColorStop(0, `rgba(${fgRgb.r},${fgRgb.g},${fgRgb.b},0.055)`);
   tint.addColorStop(1, `rgba(${fgRgb.r},${fgRgb.g},${fgRgb.b},0)`);
   ctx.fillStyle = tint;
   ctx.fillRect(0, 0, SIZE, SIZE);
-
-  /* Gradient data-module fill if alt colour has enough contrast */
   let dataFill = fgHex;
   const altColor = (theme.a !== fgHex) ? theme.a : null;
   if (altColor && contrastRatio(altColor, bgHex) >= 3.8) {
@@ -1165,16 +1061,12 @@ function renderThemedQR(url, theme, style) {
     mg.addColorStop(1, altColor);
     dataFill = mg;
   }
-
-  /* Helper: is cell (r,c) inside a finder pattern? */
   const isFinder = (r, c) =>
     (r < 7 && c < 7) || (r < 7 && c >= N-7) || (r >= N-7 && c < 7);
-
-  /* ── Draw data modules (skip finder pattern cells) ── */
   for (let r = 0; r < N; r++) {
     for (let c = 0; c < matrix[r].length; c++) {
-      if (!matrix[r][c]) continue;   /* module is OFF — skip */
-      if (isFinder(r, c)) continue;  /* handled separately */
+      if (!matrix[r][c]) continue;
+      if (isFinder(r, c)) continue;
       const x  = margin + c * cellSize;
       const y  = margin + r * cellSize;
       const s  = cellSize * (style === "dots" ? 0.80 : 0.84);
@@ -1186,14 +1078,11 @@ function renderThemedQR(url, theme, style) {
       } else if (style === "round" || style === "logo") {
         rrect(ctx, x+ox, y+ox, s, s, s * 0.36);
       } else {
-        /* square (default) */
         rrect(ctx, x+ox, y+ox, s, s, s * 0.10);
       }
       ctx.fill();
     }
   }
-
-  /* ── Draw styled finder patterns ── */
   function drawFinder(startR, startC) {
     const fx = margin + startC * cellSize;
     const fy = margin + startR * cellSize;
@@ -1203,20 +1092,14 @@ function renderThemedQR(url, theme, style) {
     const dotX = fx + 2 * cellSize, dotY = fy + 2 * cellSize;
     const outerR = cellSize * (style === "dots" ? 3.6 : style === "round" ? 1.6 : 0.55);
     const innerR = cellSize * (style === "dots" ? 1.5 : style === "round" ? 0.85 : 0.35);
-
-    /* Outer border */
     ctx.fillStyle = fgHex;
     ctx.beginPath();
     rrect(ctx, fx, fy, fw, fw, outerR);
     ctx.fill();
-
-    /* White gap */
     ctx.fillStyle = bgHex;
     ctx.beginPath();
     rrect(ctx, fx + gap, fy + gap, fw - gap*2, fw - gap*2, outerR * 0.55);
     ctx.fill();
-
-    /* Inner dot */
     ctx.fillStyle = fgHex;
     ctx.beginPath();
     if (style === "dots") {
@@ -1226,19 +1109,13 @@ function renderThemedQR(url, theme, style) {
     }
     ctx.fill();
   }
-
-  /* Three finder patterns: top-left, top-right, bottom-left */
   drawFinder(0,   0  );
   drawFinder(0,   N-7);
   drawFinder(N-7, 0  );
-
-  /* ── Logo overlay (only for "logo" style) ── */
   if (style === "logo") {
     const lw = SIZE * 0.155, lh = SIZE * 0.155;
     const lx = (SIZE - lw) / 2,  ly = (SIZE - lh) / 2;
     const pad = cellSize * 0.9;
-
-    /* White backing plate */
     ctx.fillStyle = bgHex;
     ctx.beginPath();
     rrect(ctx, lx - pad, ly - pad, lw + pad*2, lh + pad*2, lw * 0.22);
@@ -1246,8 +1123,6 @@ function renderThemedQR(url, theme, style) {
     ctx.strokeStyle = fgHex + "30";
     ctx.lineWidth = 1.5;
     ctx.stroke();
-
-    /* Draw logo image or fallback letter */
     const logoImg = document.querySelector(".logo");
     if (logoImg && logoImg.complete && logoImg.naturalWidth > 0) {
       ctx.save();
@@ -1264,8 +1139,6 @@ function renderThemedQR(url, theme, style) {
       ctx.fillText("W", SIZE/2, SIZE/2);
     }
   }
-
-  /* ── Subtle "WishCraft" watermark at the bottom ── */
   ctx.globalAlpha = 0.38;
   ctx.fillStyle   = fgHex;
   ctx.font = `400 ${Math.round(SIZE * 0.022)}px 'DM Mono', monospace`;
@@ -1273,27 +1146,18 @@ function renderThemedQR(url, theme, style) {
   ctx.textBaseline  = "bottom";
   ctx.fillText("WishCraft", SIZE/2, SIZE - 3);
   ctx.globalAlpha = 1;
-
   lastQrCanvas = canvas;
   return canvas;
 }
 
 /* ==========================================================
    LINK PREVIEW CARD
-   - updateLinkPreview : populate the OG-style card shown below
-     the share link with name, theme colours, message snippet,
-     and an optional photo thumbnail
-   - updateUrlMeter    : update the URL length bar + savings badge
    ========================================================== */
 function updateLinkPreview(payload, shareUrl, theme) {
   const lp = document.getElementById("linkPreview"); if (!lp) return;
   const name = safeText(payload.name || "Friend", 32);
-
-  /* Apply theme gradient to the banner background */
   const bg = document.getElementById("lpBannerBg");
   if (bg) bg.style.background = `linear-gradient(135deg, ${theme.a}, ${theme.b})`;
-
-  /* Set banner title and adapt text colour to background lightness */
   const lpTitle = document.getElementById("lpTitle");
   if (lpTitle) {
     lpTitle.textContent = `Happy Birthday, ${name}! 🎂`;
@@ -1301,17 +1165,11 @@ function updateLinkPreview(payload, shareUrl, theme) {
   }
   const lpSub = document.getElementById("lpSub");
   if (lpSub) lpSub.style.color = isColorDark(theme.b) ? "rgba(255,255,255,.7)" : "rgba(0,0,0,.6)";
-
-  /* Truncated message as preview description */
   const lpDesc = document.getElementById("lpDesc");
   const msg = safeText(payload.msg || "", 60);
   if (lpDesc) lpDesc.textContent = msg ? `"${msg}"` : "A personalised birthday wish is waiting for you…";
-
-  /* Show the full share URL in the bottom bar */
   const lpUrl = document.getElementById("lpUrl");
   if (lpUrl) lpUrl.textContent = shareUrl;
-
-  /* Show photo thumbnail if a photo was uploaded */
   const lpPhoto = document.getElementById("lpPhoto");
   if (lpPhoto) {
     if (payload.photo) { lpPhoto.src = payload.photo; lpPhoto.classList.add("visible"); }
@@ -1320,22 +1178,16 @@ function updateLinkPreview(payload, shareUrl, theme) {
   lp.classList.add("visible");
 }
 
-/* Update the URL length progress bar and savings badge */
 function updateUrlMeter(shareUrl) {
   const len  = shareUrl.length;
   const fill = document.getElementById("urlLenFill");
   const text = document.getElementById("urlLenText");
   const badge= document.getElementById("savingsBadge");
-
-  /* Estimate how long the URL would have been without compression */
   const msgLen = document.getElementById("msgInput")?.value?.length || 0;
   const approxUncompressed = location.origin.length + location.pathname.length + 10 + Math.ceil(msgLen * 1.4) + 200;
   const savings = Math.max(0, Math.round((1 - len / approxUncompressed) * 100));
-
   if (text)  text.textContent  = `${len} chars`;
   if (badge) badge.textContent = savings > 5 ? `~${savings}% smaller` : "compact";
-
-  /* Colour the bar: green < 40%, amber < 70%, red otherwise */
   const pct = Math.min(100, (len / 2000) * 100);
   if (fill) {
     fill.style.width = pct + "%";
@@ -1345,72 +1197,34 @@ function updateUrlMeter(shareUrl) {
 
 /* ==========================================================
    HELPER UTILITIES
-   - $             : shorthand getElementById
-   - safeText      : sanitise and truncate a string
-   - calcAge       : see full documentation below
-   - ordinal       : "1st", "2nd", "3rd" … formatter
-   - toast         : show a temporary notification pill
-   - triggerCopyMorph : animate the copy button → tick icon
-   - computeExpiryTs  : convert days → absolute timestamp
-   - isExpired        : check if a timestamp has passed
-   - expiryNoticeText : human-readable time-remaining string
    ========================================================== */
 const $ = id => document.getElementById(id);
 
-/* Sanitise: collapse whitespace, trim, and cap length */
 function safeText(s, max=220) {
   return String(s||"").replace(/\s+/g," ").trim().slice(0, max);
 }
 
-/* ==========================================================
-   AGE CALCULATION FUNCTION
-   Purpose:
-   - Calculate the person's current age from a date string
-   - Check whether birthday has occurred this year
-   - Prevent invalid or impossible ages
-   ========================================================== */
 function calcAge(dateStr) {
-  // Get the selected birth date from the input field (dateStr parameter)
   if (!dateStr) return null;
   const dob = new Date(dateStr);
-
-  // Stop if no valid date is provided
   if (isNaN(dob.getTime())) return null;
-
-  // Get today's date
   const today = new Date();
-
-  // Calculate the basic age (year difference)
   let age = today.getFullYear() - dob.getFullYear();
-
-  // Calculate month difference to check if birthday has occurred this year
   const monthDifference = today.getMonth() - dob.getMonth();
-
-  // If birthday has not happened yet this year, reduce age by one
-  if (
-    monthDifference < 0 ||
-    (monthDifference === 0 && today.getDate() < dob.getDate())
-  ) {
+  if (monthDifference < 0 || (monthDifference === 0 && today.getDate() < dob.getDate())) {
     age--;
   }
-
-  // Prevent impossible ages (negative or over 150)
   if (age < 0 || age > 150) return null;
-
-  // Return the final calculated age
   return age;
 }
 
-/* Convert a number to an ordinal string: 1 → "1st", 2 → "2nd" … */
 function ordinal(n) {
   const s = ["th","st","nd","rd"], v = n % 100;
   return n + (s[(v-20)%10] || s[v] || s[0]);
 }
 
-/* Toast notification type → emoji map */
 const TOAST_ICONS = { success:"✅", error:"❌", info:"ℹ️" };
 
-/* Show a temporary pill notification at the bottom of the screen */
 function toast(msg, type="info") {
   const container = document.getElementById("toastContainer"); if (!container) return;
   const el = document.createElement("div");
@@ -1423,18 +1237,15 @@ function toast(msg, type="info") {
     setTimeout(() => el.remove(), 280);
   };
   const t = setTimeout(dismiss, 2800);
-  /* Also dismiss on click */
   el.addEventListener("click", () => { clearTimeout(t); dismiss(); });
 }
 
-/* Animate the copy button: show tick icon for 1.6 s then revert */
 function triggerCopyMorph(btn) {
   btn.classList.add("copied");
   clearTimeout(btn._ct);
   btn._ct = setTimeout(() => btn.classList.remove("copied"), 1600);
 }
 
-/* Message preset texts for the quick-template pill buttons */
 const MSG_PRESETS = {
   heartfelt:    "You bring so much light into my life. On your special day, I hope the world reflects back all the warmth and love you give so freely. Happy Birthday! 🎂❤️",
   funny:        "Happy Birthday! You're not old — you're vintage. Like fine wine, except wine gets better with age and you just get more… distinguished. 😂🍷 Cheers to you!",
@@ -1443,23 +1254,18 @@ const MSG_PRESETS = {
   short:        "Happy Birthday! 🎉 Hope your day is as amazing as you are! 🎂",
 };
 
-/* Convert a number of days into an absolute Unix-ms expiry timestamp.
-   Returns 0 if days is 0 or invalid (meaning: never expires). */
 function computeExpiryTs(days) {
   const d = parseInt(days, 10);
   if (!d || d <= 0) return 0;
   return Date.now() + d * 24 * 60 * 60 * 1000;
 }
 
-/* FIX: isExpired — ts=0 explicitly means "never expires" */
 function isExpired(expiryTs) {
   const ts = Number(expiryTs);
   if (!ts || ts === 0) return false;
   return Date.now() > ts;
 }
 
-/* Return a human-readable notice if the link is about to expire,
-   or null if it has already expired or never expires. */
 function expiryNoticeText(expiryTs) {
   const ts = Number(expiryTs);
   if (!ts || ts === 0) return null;
@@ -1474,11 +1280,7 @@ function expiryNoticeText(expiryTs) {
 }
 
 /* ==========================================================
-   MOBILE BOTTOM SHEET (PREVIEW PANEL)
-   - openSheet  : slide the drawer up; hide the FAB
-   - closeSheet : slide the drawer down; restore the FAB
-   - syncSheet  : re-render the preview HTML inside the drawer
-   - initSheetSwipe : enable swipe-to-dismiss on touch devices
+   MOBILE BOTTOM SHEET
    ========================================================== */
 let _sheetOpen = false;
 function openSheet()  {
@@ -1496,8 +1298,6 @@ function closeSheet() {
   document.body.style.overflow = "";
 }
 
-/* FIX: syncSheet re-renders HTML directly rather than cloning the canvas,
-   which would produce a blank copy due to canvas transfer restrictions */
 function syncSheet() {
   if (!_sheetOpen) return;
   const dst = document.getElementById("sheetStageWrap"); if (!dst) return;
@@ -1514,12 +1314,10 @@ function syncSheet() {
     </div>`;
 }
 
-/* Escape HTML special characters to prevent XSS in innerHTML */
 function escHtml(s) {
   return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 }
 
-/* Wire touch-drag-to-dismiss on the bottom sheet */
 function initSheetSwipe() {
   const sheet = document.getElementById("bottomSheet");
   let startY = 0, dragging = false;
@@ -1532,24 +1330,19 @@ function initSheetSwipe() {
   sheet.addEventListener("touchend", e => {
     const dy = e.changedTouches[0].clientY - startY;
     sheet.style.transform = "";
-    if (dy > 80) closeSheet(); /* dismiss if dragged down > 80px */
+    if (dy > 80) closeSheet();
     dragging = false;
   });
 }
 
 /* ==========================================================
    GLOBAL STATE & THEME HELPERS
-   - setStatus    : update the status pill in the topbar
-   - setCSSVars   : apply a theme's colours as CSS custom properties
-   - applyEffect  : toggle the fx-* body class for visual effects
-   - applyFont    : set body font-family from font selection
    ========================================================== */
 function setStatus(state, text) {
   const p = $("statusPill"), t = $("statusText"); if (!p) return;
   p.className = "status-pill " + (state||""); if (t) t.textContent = " " + text;
 }
 
-/* Apply theme colours to CSS variables and the browser theme-color meta */
 function setCSSVars(themeId) {
   const t = THEMES.find(x=>x.id===themeId)||THEMES[0];
   document.documentElement.style.setProperty("--a", t.a);
@@ -1558,14 +1351,11 @@ function setCSSVars(themeId) {
   return t;
 }
 
-/* Toggle a single fx-* class on <body> */
 function applyEffect(e) {
   document.body.classList.remove("fx-glow","fx-sparkle","fx-neon","fx-glass","fx-aurora","fx-cinematic");
   if (e && e !== "auto") document.body.classList.add("fx-" + e);
 }
 
-/* Apply the selected font family to <body>; fall back to theme-derived font
-   when "auto" is selected */
 function applyFont(fontId, themeId) {
   const f = FONTS.find(x=>x.id===fontId);
   if (!f || fontId === "auto") {
@@ -1578,11 +1368,6 @@ function applyFont(fontId, themeId) {
 
 /* ==========================================================
    BACKGROUND & PARTICLE EFFECTS
-   - initStars          : paint a randomised star field on the
-                          full-page background canvas
-   - initStageParticles : animate soft floating dust particles
-                          inside the live-preview stage card
-   Both functions honour prefers-reduced-motion.
    ========================================================== */
 function initStars() {
   if (window.matchMedia?.("(prefers-reduced-motion:reduce)").matches) return;
@@ -1602,7 +1387,6 @@ function initStars() {
     }
   }
   draw();
-  /* Redraw on resize with a 300 ms debounce */
   window.addEventListener("resize", () => { clearTimeout(timer); timer = setTimeout(draw,300); });
 }
 
@@ -1610,7 +1394,6 @@ function initStageParticles() {
   if (window.matchMedia?.("(prefers-reduced-motion:reduce)").matches) return;
   const c = $("stageParticles"); if (!c) return;
   const ctx = c.getContext("2d");
-  /* Create 18 floating dust particles with random positions and velocities */
   const ps = Array.from({length:18}, () => ({
     x:  Math.random(),
     y:  Math.random() + 0.5,
@@ -1625,7 +1408,6 @@ function initStageParticles() {
   resize();
   new ResizeObserver(resize).observe(c.parentElement);
   let running = true;
-  /* Pause animation when the stage is scrolled out of view */
   if ("IntersectionObserver" in window) {
     new IntersectionObserver(([e]) => { running = e.isIntersecting; }, { threshold:0.1 }).observe(c.parentElement);
   }
@@ -1635,7 +1417,6 @@ function initStageParticles() {
       const ca = getComputedStyle(document.documentElement).getPropertyValue("--a").trim() || "#b38f6f";
       for (const p of ps) {
         p.x += p.vx; p.y += p.vy;
-        /* Wrap particles that drift off-screen */
         if (p.y < -.01) p.y = 1.01;
         if (p.x < 0) p.x = 1;
         if (p.x > 1) p.x = 0;
@@ -1652,10 +1433,6 @@ function initStageParticles() {
 
 /* ==========================================================
    THEME SWATCH & STRIP BUILDERS
-   - buildSwatches       : create the ARIA radiogroup of colour swatches
-   - updateActiveSwatch  : set aria-checked and .active on the
-                           currently selected swatch
-   - buildThemeStrip     : the mini colour bar below the live preview
    ========================================================== */
 function buildSwatches() {
   const bar = $("swatchBar"); if (!bar) return;
@@ -1670,7 +1447,6 @@ function buildSwatches() {
     sw.setAttribute("aria-label",  t.label);
     sw.setAttribute("aria-checked", idx === 0 ? "true" : "false");
     sw.setAttribute("tabindex",     idx === 0 ? "0"   : "-1");
-    /* Split swatch shows both colours side by side */
     sw.innerHTML = `<div class="swatch-inner"><div class="swatch-half" style="background:${t.a}"></div><div class="swatch-half" style="background:${t.b}"></div></div>`;
     sw.addEventListener("click", () => {
       const s = $("themeSelect"); if (s) s.value = t.id;
@@ -1678,7 +1454,6 @@ function buildSwatches() {
     });
     bar.appendChild(sw);
   });
-  /* Keyboard navigation: arrow keys move focus, Enter/Space activates */
   bar.addEventListener("keydown", e => {
     const swatches = [...bar.querySelectorAll("[role='radio']")];
     const focused  = bar.querySelector("[role='radio']:focus");
@@ -1721,33 +1496,28 @@ function buildThemeStrip() {
 
 /* ==========================================================
    LIVE PREVIEW HELPERS
-   - updateCharCount    : update the "N/220" character counter
-   - schedLive          : debounce wrapper for updateLive
-   - updateLiveCountdown: tick a live countdown inside the preview
-   - updateLive         : re-render the entire live preview stage
    ========================================================== */
 function updateCharCount() {
   const ta = $("msgInput"), cc = $("charCount");
   if (ta && cc) cc.textContent = ta.value.length;
 }
 
-/* Debounce live updates to 60 ms so rapid keystrokes don't thrash the DOM */
 function schedLive() {
   clearTimeout(liveDebounce);
   liveDebounce = setTimeout(updateLive, 60);
 }
 
-/* FIX: live countdown — clear old interval properly, guard empty dateStr */
+/* ── FIX 1: updateLiveCountdown
+   Use new Date(year, month, day) instead of copying dob and patching
+   the year, which can carry over wrong month/day due to Date quirks. */
 let _liveCountdownTimer = null;
 function updateLiveCountdown(dateStr) {
   const wrap = $("liveCountdown"); if (!wrap) return;
-  /* Cancel any previously running countdown interval */
   if (_liveCountdownTimer) { clearInterval(_liveCountdownTimer); _liveCountdownTimer = null; }
   if (!dateStr) { wrap.style.display = "none"; return; }
   function tick() {
     const now = new Date(), dob = new Date(dateStr);
     if (isNaN(dob.getTime())) { wrap.style.display="none"; return; }
-    /* Check if today is the birthday */
     const isBday = now.getMonth()===dob.getMonth() && now.getDate()===dob.getDate();
     const lbl = $("liveCountdownLabel");
     if (isBday) {
@@ -1756,8 +1526,8 @@ function updateLiveCountdown(dateStr) {
       ["lcdD","lcdH","lcdM","lcdS"].forEach(id => { const e=$(id); if(e)e.textContent="🎂"; });
       return;
     }
-    /* Compute time to next birthday occurrence */
-    const next = new Date(dob); next.setFullYear(now.getFullYear());
+    /* FIXED: construct next birthday from current year components directly */
+    const next = new Date(now.getFullYear(), dob.getMonth(), dob.getDate());
     if (next <= now) next.setFullYear(now.getFullYear()+1);
     const diff = next - now;
     const d=Math.floor(diff/864e5), h=Math.floor((diff%864e5)/36e5),
@@ -1771,7 +1541,6 @@ function updateLiveCountdown(dateStr) {
   _liveCountdownTimer = setInterval(tick, 1000);
 }
 
-/* Re-render the live preview stage from current form values */
 function updateLive() {
   const name    = safeText($("nameInput")?.value||"Friend", 32);
   const msg     = safeText($("msgInput")?.value||"Wishing you a day full of joy, laughter, and love. Happy Birthday! 🎉", 220);
@@ -1780,35 +1549,21 @@ function updateLive() {
   const effect  = $("effectSelect")?.value   || "auto";
   const tmpl    = $("templateSelect")?.value || "t1";
   const date    = $("dateInput")?.value      || "";
-
-  /* Apply theme, font, and effect globally */
   setCSSVars(themeId); applyFont(fontId,themeId); applyEffect(effect);
   updateActiveSwatch(themeId); updateCharCount();
-
-  /* Update name and message text in the preview */
   const ln = $("liveTitle"); if (ln) ln.textContent = name;
   const lm = $("liveMsg");   if (lm) lm.textContent = msg;
-
-  /* Update Live Preview Age */
   const ae = $("liveAge");
   if (ae) {
-    // Calculate age from the current date input value
     const age = calcAge(date);
-
-    // Show calculated age in the live preview panel, or hide if invalid
     if (age !== null) {
-      // Display in "X Years Old" format matching the birthday page style
       ae.textContent = age + " Years Old";
       ae.style.display = "block";
     } else {
       ae.style.display = "none";
     }
   }
-
-  /* Apply the selected layout template class to the stage */
   const st = $("liveStage"); if (st) st.className = "stage " + tmpl;
-
-  /* Show photo if one is uploaded, otherwise show the placeholder */
   const ph = $("livePhoto"), fb = document.querySelector("#liveFrame .ph-fallback");
   if (uploadedPhotoUrl && ph) {
     ph.src = uploadedPhotoUrl; ph.style.display = "block";
@@ -1817,18 +1572,12 @@ function updateLive() {
     ph.removeAttribute("src"); ph.style.display = "none";
     if (fb) fb.style.display = "block";
   }
-
-  /* Update the countdown in the preview */
   updateLiveCountdown(date);
   syncSheet();
 }
 
 /* ==========================================================
    PHOTO UPLOAD (CLOUDINARY)
-   - uploadCloudinary : POST the file to Cloudinary using the
-                        unsigned upload preset; returns JSON
-   - handleFile       : validate size/type, show progress bar,
-                        call upload, update preview on success
    ========================================================== */
 async function uploadCloudinary(file) {
   const fd = new FormData();
@@ -1841,14 +1590,11 @@ async function uploadCloudinary(file) {
 }
 
 async function handleFile(file) {
-  /* Validate file type */
   if (!file?.type.startsWith("image/")) { toast("Please select an image","error"); return; }
-  /* Validate file size (4 MB max) */
   if (file.size > 4*1024*1024)          { toast("Please upload under 4 MB ⚠️","error"); return; }
   const se=$("uploadState"), pw=$("progressWrap"), pb=$("progressBar");
   if (se) se.textContent="Uploading…";
   if (pw) pw.classList.add("show");
-  /* Animate progress bar with fake stages */
   if (pb) { pb.style.width="10%"; setTimeout(()=>pb.style.width="60%",200); }
   setStatus("uploading","Uploading…");
   try {
@@ -1856,7 +1602,6 @@ async function handleFile(file) {
     uploadedPhotoUrl = data.secure_url;
     if (pb) pb.style.width="100%";
     setTimeout(()=>{ if(pw)pw.classList.remove("show"); if(pb)pb.style.width="0%"; }, 600);
-    /* Show the upload preview thumbnail */
     const prev=$("photoPreview"), wrap=$("previewWrap"), zone=$("uploadZone");
     if (prev) { prev.src=uploadedPhotoUrl; prev.style.display="block"; }
     if (wrap) wrap.classList.add("visible");
@@ -1873,20 +1618,12 @@ async function handleFile(file) {
 
 /* ==========================================================
    QR BUILD & DISPLAY
-   - buildAndShowQR : render a new themed QR canvas into the DOM
-     and produce a PNG blob for the download/share/copy actions.
-     Shows a spinner while rendering, then swaps it for the canvas.
    ========================================================== */
 async function buildAndShowQR(shareUrl, themeId, style) {
   const theme = THEMES.find(t=>t.id===themeId)||THEMES[0];
   const wrap  = $("qrWrap"); if (!wrap) return;
-
-  /* Show spinner while heavy rendering runs */
   wrap.innerHTML = '<div class="qr-ph"><span class="spinner"></span></div>';
-
-  /* Yield to the browser so the spinner paints before we block */
   await new Promise(r => setTimeout(r, 30));
-
   try {
     const canvas = renderThemedQR(shareUrl, theme, style);
     wrap.innerHTML = "";
@@ -1896,13 +1633,9 @@ async function buildAndShowQR(shareUrl, themeId, style) {
     canvas.style.cssText = "max-width:260px;width:100%;height:auto;display:block;border-radius:6px";
     wrapInner.appendChild(canvas);
     wrap.appendChild(wrapInner);
-
-    /* FIX: use Promise-based toBlob (avoid synchronous access issues) */
     lastQrBlob = await new Promise((res, rej) =>
       canvas.toBlob(b => b ? res(b) : rej(new Error("toBlob failed")), "image/png")
     );
-
-    /* Enable action buttons now that the blob is ready */
     [$("downloadQrBtn"),$("shareQrBtn"),$("copyQrBtn")].forEach(b => { if(b) b.disabled=false; });
   } catch(e) {
     console.error("QR render error:", e);
@@ -1913,19 +1646,12 @@ async function buildAndShowQR(shareUrl, themeId, style) {
 
 /* ==========================================================
    CONFETTI ANIMATION
-   - Spawns 220 coloured rectangles and circles on the player
-     canvas element and fades them out toward the end
-   - FIX: reads canvas dimensions from getBoundingClientRect
-     so it works correctly even before the first paint
-   - Respects prefers-reduced-motion
    ========================================================== */
 function confetti(durationMs=2800) {
   if (window.matchMedia?.("(prefers-reduced-motion:reduce)").matches) return;
   const c = $("confetti"); if (!c) return;
   const ctx = c.getContext("2d"); if (!ctx) return;
   const dpr  = Math.min(2, window.devicePixelRatio||1);
-
-  /* FIX: use getBoundingClientRect to get actual rendered dimensions */
   const rect = c.parentElement.getBoundingClientRect();
   const W = rect.width  || 600;
   const H = rect.height || 600;
@@ -1933,7 +1659,6 @@ function confetti(durationMs=2800) {
   c.height = Math.floor(H * dpr);
   c.style.width  = W + "px";
   c.style.height = H + "px";
-
   const cols = ["#FFD700","#FF6B6B","#4ECDC4","#45B7D1","#96CEB4","#FFEAA7","#DDA0DD","#98D8C8","#ff9ff3","#ffd32a"];
   const ps = Array.from({length:220}).map(()=>({
     x:     Math.random()*c.width,
@@ -1943,14 +1668,13 @@ function confetti(durationMs=2800) {
     r:     (Math.random()*7+2)*dpr,
     a:     Math.random()*Math.PI*2,
     va:    (Math.random()-.5)*.22,
-    g:     (Math.random()*.07+.03)*dpr,   /* gravity */
+    g:     (Math.random()*.07+.03)*dpr,
     color: cols[Math.floor(Math.random()*cols.length)],
     shape: Math.random()>.5?"rect":"circle"
   }));
   const t0 = performance.now();
   const frame = t => {
     const el = t - t0;
-    /* Fade out in the last 700 ms */
     const al = el > durationMs-700 ? Math.max(0,1-(el-(durationMs-700))/700) : 1;
     ctx.clearRect(0,0,c.width,c.height);
     for (const p of ps) {
@@ -1969,33 +1693,27 @@ function confetti(durationMs=2800) {
 
 /* ==========================================================
    BIRTHDAY COUNTDOWN TIMER (PLAYER PAGE)
-   - Calculates time remaining to the next occurrence of the
-     recipient's birthday and updates the display every second
-   - Applies a short flip animation when each digit changes
-   - Shows a "Today is the birthday!" shimmer message on the day
+   ── FIX 2: construct next birthday from year/month/day components
+      directly instead of cloning dob and setting the year, which
+      can produce wrong dates when dob has a time component or
+      the Date copy carries unexpected state.
    ========================================================== */
 function startCountdown(dateStr) {
   const wrap = $("countdownWrap"); if (!wrap) return;
   const label = $("countdownLabel");
-
-  /* Animate a digit change with a quick scale-out/in flip */
   function setVal(el, newVal) {
     if (!el || el.textContent === newVal) return;
     el.classList.add("flip");
     setTimeout(()=>{ el.textContent=newVal; el.classList.remove("flip"); }, 120);
   }
-
   function tick() {
     const now = new Date(), dob = new Date(dateStr);
     if (isNaN(dob.getTime())) return;
-
-    /* Find the next birthday occurrence */
-    const next = new Date(dob); next.setFullYear(now.getFullYear());
+    /* FIXED: build next birthday using current year + dob month/day */
+    const next = new Date(now.getFullYear(), dob.getMonth(), dob.getDate());
     if (next < now) next.setFullYear(now.getFullYear()+1);
-
     const isBday = now.getMonth()===dob.getMonth() && now.getDate()===dob.getDate();
     if (isBday) { wrap.classList.add("visible","birthday-today"); return; }
-
     wrap.classList.add("visible"); wrap.classList.remove("birthday-today");
     const diff = next - now;
     const d=Math.floor(diff/864e5), h=Math.floor((diff%864e5)/36e5),
@@ -2008,7 +1726,6 @@ function startCountdown(dateStr) {
   setInterval(tick, 1000);
 }
 
-/* Float an emoji from a reaction button upward and fade out */
 function floatEmoji(emoji, x, y) {
   const el = document.createElement("div");
   el.className = "float-emoji"; el.textContent = emoji;
@@ -2017,22 +1734,14 @@ function floatEmoji(emoji, x, y) {
   setTimeout(()=>el.remove(), 950);
 }
 
-/* Switch between builder and player views */
 function showBuilder() { $("builder")?.classList.remove("hidden"); $("player")?.classList.add("hidden"); }
 function showPlayer()  { $("builder")?.classList.add("hidden");    $("player")?.classList.remove("hidden"); }
 
 /* ==========================================================
    PLAYER RENDERER
-   - renderPlayer : populate the birthday player view from
-     a decoded payload object.
-   - Handles: expired link overlay, theming, photo display,
-     age display, animation class, countdown, expiry notice,
-     and confetti launch.
    ========================================================== */
 function renderPlayer(payload) {
-  /* FIX: correct expiry check — ts=0 means never expires */
   if (isExpired(payload.expiry)) {
-    /* Show the expired overlay and hide all interactive content */
     $("expiredScreen")?.classList.add("visible");
     [$("playerHero"),document.querySelector(".player-photo"),$("reactions"),$("countdownWrap"),document.querySelector(".player-cta")]
       .forEach(el=>{ if(el) el.style.display="none"; });
@@ -2040,39 +1749,24 @@ function renderPlayer(payload) {
     setCSSVars(payload.theme || "bronzenoir");
     return;
   }
-
   const name    = safeText(payload.name||"Friend", 32);
   const msg     = safeText(payload.msg||"Wishing you a day full of joy, laughter, and love. Happy Birthday! 🎉", 220);
   const themeId = payload.theme || "bronzenoir";
-
-  /* Apply theme, font, and effect */
   setCSSVars(themeId); applyFont(payload.font||"auto",themeId); applyEffect(payload.effect||"auto");
-
-  /* Set the recipient's name and message */
   const pn=$("pName"); if(pn) pn.textContent=name;
   const pm=$("pMsg");  if(pm) pm.textContent=msg;
-
-  /* Update Birthday Page Age */
   const pa=$("pAge");
   if (pa) {
-    // Calculate current age from birth date stored in the payload
     const age = calcAge(payload.date || "");
-
-    // Display age if valid, otherwise hide the element
     if (age !== null) {
-      // Show age in "X Years Old" format on the birthday player page
       pa.textContent = age + " Years Old 🎂";
       pa.style.display = "block";
     } else {
       pa.style.display = "none";
     }
   }
-
-  /* Apply layout template and entrance animation classes */
   const stage = $("playerStage");
   if (stage) stage.className = `player-stage ${payload.template||"t1"} anim-${payload.anim||"fade"}`;
-
-  /* Display photo or fallback */
   const img=$("pPhoto"), fb=document.querySelector(".player-photo .ph-fallback"), pw=document.querySelector(".player-photo");
   if (payload.photo && img) {
     img.src=payload.photo; img.style.display="block";
@@ -2081,18 +1775,11 @@ function renderPlayer(payload) {
     img.removeAttribute("src"); img.style.display="none";
     if(fb) fb.style.display="block"; if(pw) pw.style.display="none"; stage?.classList.add("no-photo");
   }
-
-  /* Typewriter animation: add class then remove after it completes */
   if (payload.anim==="typewriter" && pm) {
     pm.classList.add("tw"); setTimeout(()=>pm.classList.remove("tw"),4000);
   }
-
   document.title = `Happy Birthday, ${name}! — WishCraft`;
-
-  /* Start the birthday countdown if a date is provided */
   if (payload.date) startCountdown(payload.date);
-
-  /* Show expiry warning banner if appropriate */
   const notice = expiryNoticeText(payload.expiry);
   const noticeEl = $("expiryNotice");
   if (noticeEl && notice) {
@@ -2100,11 +1787,7 @@ function renderPlayer(payload) {
     noticeEl.classList.add("visible");
     if (notice.critical) noticeEl.classList.add("critical");
   }
-
-  /* FIX: delay confetti slightly so the canvas has rendered dimensions */
   setTimeout(()=>confetti(3000), 100);
-
-  /* Restore reaction counts from localStorage */
   try {
     const stored = JSON.parse(localStorage.getItem("wc_rc_"+name)||"[0,0,0,0]");
     reactionCounts = stored;
@@ -2114,8 +1797,6 @@ function renderPlayer(payload) {
 
 /* ==========================================================
    SELECT POPULATION HELPER
-   - fillSelect: populate a <select> element from an array of
-     { id, name|label } objects
    ========================================================== */
 function fillSelect(el, items) {
   if (!el) return; el.innerHTML="";
@@ -2128,12 +1809,9 @@ function fillSelect(el, items) {
 
 /* ==========================================================
    UPLOAD ZONE WIRING
-   - setupUpload: wire click, dragover, dragleave, drop, and
-     file-input change events to the upload zone element
    ========================================================== */
 function setupUpload() {
   const zone = $("uploadZone"); if (!zone) return;
-  /* Click anywhere in the zone (except the remove button) to pick a file */
   zone.addEventListener("click", e => { if(e.target===$("removePhotoBtn"))return; $("photoInput")?.click(); });
   zone.addEventListener("dragover", e => { e.preventDefault(); zone.classList.add("dragover"); });
   zone.addEventListener("dragleave", ()=>zone.classList.remove("dragover"));
@@ -2143,19 +1821,15 @@ function setupUpload() {
 
 /* ==========================================================
    QR STYLE BUTTON WIRING
-   - wireQrStyleBtns: attach click listeners to the four QR style
-     toggle buttons; re-renders the QR when the style changes
    ========================================================== */
 function wireQrStyleBtns() {
   document.querySelectorAll(".qr-style-btn").forEach(btn => {
     btn.addEventListener("click", async () => {
-      /* Deactivate all style buttons then activate the clicked one */
       document.querySelectorAll(".qr-style-btn").forEach(b => {
         b.classList.remove("active"); b.setAttribute("aria-pressed","false");
       });
       btn.classList.add("active"); btn.setAttribute("aria-pressed","true");
       currentQrStyle = btn.dataset.style;
-      /* Immediately re-render the QR in the new style if a URL exists */
       if (lastShareUrl && lastPayload) {
         await buildAndShowQR(lastShareUrl, lastPayload.theme||"bronzenoir", currentQrStyle);
       }
@@ -2165,25 +1839,11 @@ function wireQrStyleBtns() {
 
 /* ==========================================================
    EVENT WIRING
-   - wireEvents: attach all DOM event listeners including:
-     · Live-preview form inputs (name, message, theme, etc.)
-     · Template pill preset buttons
-     · Mobile sheet open/close
-     · Reset button
-     · Remove photo button
-     · Copy link button
-     · Generate button (main action)
-     · QR download / share / copy buttons
-     · Replay button (player page)
-     · Fullscreen button
-     · Emoji reaction buttons
    ========================================================== */
 function wireEvents() {
-  /* Live preview: re-render on any form field change */
   ["nameInput","msgInput","themeSelect","templateSelect","fontSelect","effectSelect","animSelect","dateInput"]
     .forEach(id=>{ $(id)?.addEventListener("input",schedLive); $(id)?.addEventListener("change",schedLive); });
 
-  /* Quick template pills: inject preset message text */
   document.querySelectorAll(".tmpl-pill").forEach(btn=>{
     btn.addEventListener("click", ()=>{
       const text = MSG_PRESETS[btn.dataset.preset]; if (!text) return;
@@ -2193,13 +1853,11 @@ function wireEvents() {
     });
   });
 
-  /* Mobile bottom sheet controls */
   $("previewFab")?.addEventListener("click",  openSheet);
   $("sheetClose")?.addEventListener("click",  closeSheet);
   $("sheetBackdrop")?.addEventListener("click",closeSheet);
   $("sheetHandle")?.addEventListener("click",  closeSheet);
 
-  /* Reset all form fields and clear generated output */
   $("resetBtn")?.addEventListener("click", ()=>{
     const defs={nameInput:"",msgInput:"Wishing you a day full of joy, laughter, and love. Happy Birthday! 🎉",themeSelect:"bronzenoir",templateSelect:"t1",fontSelect:"auto",effectSelect:"auto",animSelect:"fade",dateInput:"",expirySelect:"0"};
     Object.entries(defs).forEach(([id,v])=>{ const e=$(id); if(e)e.value=v; });
@@ -2222,7 +1880,6 @@ function wireEvents() {
     updateLive(); toast("Reset ✓","info");
   });
 
-  /* Remove uploaded photo */
   $("removePhotoBtn")?.addEventListener("click", e=>{
     e.stopPropagation(); uploadedPhotoUrl="";
     const prev=$("photoPreview"),wrap=$("previewWrap"),zone=$("uploadZone");
@@ -2232,7 +1889,6 @@ function wireEvents() {
     updateLive(); toast("Photo removed","info");
   });
 
-  /* Copy share link to clipboard */
   $("copyBtn")?.addEventListener("click", async ()=>{
     const v=($("shareLink")?.value||"").trim();
     if(!v){toast("Generate a link first","error");return;}
@@ -2245,13 +1901,9 @@ function wireEvents() {
     }
   });
 
-  /* ── Main Generate button ── */
   $("generateBtn")?.addEventListener("click", async ()=>{
     const btn=$("generateBtn");
-    /* Disable button and show spinner while generating */
     if(btn){btn.disabled=true;btn.innerHTML='<span class="spinner"></span> Generating…';}
-
-    /* Collect form values */
     const name      = safeText($("nameInput")?.value||"Friend",32);
     const msg       = safeText($("msgInput")?.value||"Wishing you a day full of joy, laughter, and love. Happy Birthday! 🎉",220);
     const themeId   = $("themeSelect")?.value    || "bronzenoir";
@@ -2262,12 +1914,8 @@ function wireEvents() {
     const date      = $("dateInput")?.value      || "";
     const expiryDays= parseInt($("expirySelect")?.value||"0",10);
     const expiryTs  = computeExpiryTs(expiryDays);
-
-    /* Build the payload object */
     const payload   = {name,msg,theme:themeId,template:tmpl,font:fontId,effect,anim,photo:uploadedPhotoUrl||"",date,expiry:expiryTs};
     lastPayload     = payload;
-
-    /* Encode payload → URL hash string */
     let encoded, shareUrl;
     try {
       encoded  = encodePayload(payload);
@@ -2279,30 +1927,20 @@ function wireEvents() {
       return;
     }
     lastShareUrl = shareUrl;
-
-    /* Populate the share link input and open button */
     const sl=$("shareLink"); if(sl)sl.value=shareUrl;
     const ob=$("openLinkBtn"); if(ob){ob.href=shareUrl;ob.style.display="";}
     const sc=$("shareCard"); if(sc)sc.style.display="";
-
-    /* Update URL meter and link preview card */
     updateUrlMeter(shareUrl);
     const theme = THEMES.find(t=>t.id===themeId)||THEMES[0];
     updateLinkPreview(payload, shareUrl, theme);
-
-    /* Render the themed QR code */
     await buildAndShowQR(shareUrl, themeId, currentQrStyle);
-
     toast("Link + QR ready 🎉","success");
-
-    /* Restore button with "Regenerate" label */
     if(btn){
       btn.disabled=false;
       btn.innerHTML='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg> Regenerate';
     }
   });
 
-  /* QR download: create a temporary <a> with an object URL */
   $("downloadQrBtn")?.addEventListener("click",()=>{
     if(!lastQrBlob){toast("Generate QR first","error");return;}
     const url=URL.createObjectURL(lastQrBlob),a=document.createElement("a");
@@ -2311,7 +1949,6 @@ function wireEvents() {
     toast("Downloading QR ⬇","info");
   });
 
-  /* QR share via Web Share API */
   $("shareQrBtn")?.addEventListener("click",async()=>{
     if(!lastQrBlob){toast("Generate QR first","error");return;}
     if(!navigator.share){toast("Not supported — use Download","info");return;}
@@ -2322,7 +1959,6 @@ function wireEvents() {
     } catch { toast("Share cancelled","info"); }
   });
 
-  /* QR copy to clipboard via Clipboard API */
   $("copyQrBtn")?.addEventListener("click",async()=>{
     if(!lastQrBlob){toast("Generate QR first","error");return;}
     try {
@@ -2333,7 +1969,6 @@ function wireEvents() {
     } catch { toast("Copy failed — use Download","error"); }
   });
 
-  /* Replay button: re-fire confetti and bounce the hero section */
   $("replayBtn")?.addEventListener("click",()=>{
     confetti(2800);
     const hero=$("playerHero");
@@ -2341,7 +1976,6 @@ function wireEvents() {
     toast("🎉 Happy Birthday!","success");
   });
 
-  /* Fullscreen toggle for the player stage */
   $("fullscreenBtn")?.addEventListener("click",async()=>{
     const el=$("playerStage"),btn=$("fullscreenBtn");
     if(!document.fullscreenElement){
@@ -2353,71 +1987,47 @@ function wireEvents() {
     }
   });
 
-  /* Emoji reaction buttons: increment count and float a copy of the emoji */
   document.querySelectorAll(".reaction-btn").forEach((btn,i)=>{
     btn.addEventListener("click",e=>{
       reactionCounts[i]++;
       const rc=$("rc"+i);if(rc)rc.textContent=reactionCounts[i];
       const rect=btn.getBoundingClientRect();
       floatEmoji(btn.dataset.emoji,rect.left+rect.width/2,rect.top);
-      /* Persist counts to localStorage keyed by recipient name */
       try{localStorage.setItem("wc_rc_"+($("pName")?.textContent||"?"),JSON.stringify(reactionCounts));}catch{}
     });
   });
 
-  /* Reload page when hash changes (e.g. back/forward navigation) */
   window.addEventListener("hashchange",()=>location.reload());
 }
 
 /* ==========================================================
-   BOOT / INITIALISATION
-   - boot: application entry point
-     1. Initialise background stars
-     2. Populate all <select> dropdowns
-     3. Set default values
-     4. Build swatches and theme strip
-     5. Wire upload, QR style, and all events
-     6. Initialise sheet swipe gesture
-     7. Route to player or builder based on URL hash
+   BOOT
    ========================================================== */
 function boot() {
   initStars();
-
-  /* Populate dropdowns from data arrays */
   fillSelect($("themeSelect"),   THEMES);
   fillSelect($("templateSelect"),TEMPLATES);
   fillSelect($("fontSelect"),    FONTS);
-
-  /* Apply default selections */
   const defaults={themeSelect:"bronzenoir",templateSelect:"t1",fontSelect:"auto",effectSelect:"auto",animSelect:"fade"};
   Object.entries(defaults).forEach(([id,v])=>{ const e=$(id); if(e)e.value=v; });
-
   buildSwatches(); buildThemeStrip(); setupUpload(); wireQrStyleBtns(); wireEvents(); initSheetSwipe();
-
-  /* ── URL routing ── */
   const hashNew    = location.hash.match(/#w=([^&]+)/);
   const hashLegacy = location.hash.match(/wish=([^&]+)/);
-
   if (hashNew) {
-    /* New compressed format: #w=<encoded> */
     try {
       const payload = decodePayload(decodeURIComponent(hashNew[1]));
       showPlayer(); renderPlayer(payload); return;
     } catch(e) { console.error("Bad payload (new format):", e); toast("Could not load wish — link may be broken","error"); }
   }
   if (hashLegacy) {
-    /* Legacy plain base64 format: #wish=<base64> */
     try {
       const payload = legacyDecode(decodeURIComponent(hashLegacy[1]));
       if (payload) { showPlayer(); renderPlayer(payload); return; }
     } catch(e) { console.error("Bad payload (legacy):", e); }
   }
-
-  /* Default: show the builder and start the live preview */
   showBuilder(); updateLive(); initStageParticles();
 }
 
-/* ── Kick everything off ── */
 boot();
 </script>
 </body>
